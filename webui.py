@@ -167,6 +167,7 @@ with shared.gradio_root:
             gallery = gr.Gallery(label='Gallery', show_label=False, object_fit='contain', visible=True, height=768,
                                  elem_classes=['resizable_area', 'main_view', 'final_gallery', 'image_gallery'],
                                  elem_id='final_gallery')
+            delete_image_request = gr.Textbox(elem_id='delete_image_request', visible=False)
             with gr.Row():
                 with gr.Column(scale=17):
                     prompt = gr.Textbox(show_label=False, placeholder="Type prompt here or paste parameters.", elem_id='positive_prompt',
@@ -182,6 +183,7 @@ with shared.gradio_root:
                     load_parameter_button = gr.Button(label="Load Parameters", value="Load Parameters", elem_classes='type_row', elem_id='load_parameter_button', visible=False)
                     skip_button = gr.Button(label="Skip", value="Skip", elem_classes='type_row_half', elem_id='skip_button', visible=False)
                     stop_button = gr.Button(label="Stop", value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
+                    queue_button = gr.Button(label="Queue Prompt", value="Queue Prompt", elem_classes='type_row_half', elem_id='queue_button', visible=True)
 
                     def stop_clicked(currentTask):
                         import ldm_patched.modules.model_management as model_management
@@ -199,16 +201,27 @@ with shared.gradio_root:
 
                     stop_button.click(stop_clicked, inputs=currentTask, outputs=currentTask, queue=False, show_progress=False, _js='cancelGenerateForever')
                     skip_button.click(skip_clicked, inputs=currentTask, outputs=currentTask, queue=False, show_progress=False)
+            prompt_queue = gr.State([])
+            prompt_queue_display = gr.HTML(value='', elem_id='prompt_queue_display', visible=False)
             with gr.Row(elem_classes='advanced_check_row'):
                 input_image_checkbox = gr.Checkbox(label='Input Image', value=modules.config.default_image_prompt_checkbox, container=False, elem_classes='min_check')
                 enhance_checkbox = gr.Checkbox(label='Enhance', value=modules.config.default_enhance_checkbox, container=False, elem_classes='min_check')
                 advanced_checkbox = gr.Checkbox(label='Advanced', value=modules.config.default_advanced_checkbox, container=False, elem_classes='min_check')
             with gr.Row(visible=modules.config.default_image_prompt_checkbox) as image_input_panel:
+                with gr.Row():
+                    mixing_image_prompt_and_vary_upscale_main = gr.Checkbox(
+                        label='Mix Image Prompt and Vary/Upscale',
+                        value=False, container=False, elem_classes='min_check')
+                    mixing_image_prompt_and_inpaint_main = gr.Checkbox(
+                        label='Mix Image Prompt and Inpaint',
+                        value=False, container=False, elem_classes='min_check')
                 with gr.Tabs(selected=modules.config.default_selected_image_input_tab_id):
                     with gr.Tab(label='Upscale or Variation', id='uov_tab') as uov_tab:
                         with gr.Row():
                             with gr.Column():
-                                uov_input_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False)
+                                uov_input_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, elem_id='uov_input_image')
+                                uov_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_id='uov_paste_btn', elem_classes='type_row_half')
+                                uov_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#uov_input_image"); }', queue=False, show_progress=False)
                             with gr.Column():
                                 uov_method = gr.Radio(label='Upscale or Variation:', choices=flags.uov_list, value=modules.config.default_uov_method)
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Documentation</a>')
@@ -223,7 +236,9 @@ with shared.gradio_root:
                             for image_count in range(modules.config.default_controlnet_image_count):
                                 image_count += 1
                                 with gr.Column():
-                                    ip_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, height=300, value=modules.config.default_ip_images[image_count])
+                                    ip_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, height=300, value=modules.config.default_ip_images[image_count], elem_id=f'ip_image_{image_count}')
+                                    ip_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_classes='type_row_half')
+                                    ip_paste_btn.click(fn=lambda: None, _js=f'() => {{ pasteImageFromClipboard("#ip_image_{image_count}"); }}', queue=False, show_progress=False)
                                     ip_images.append(ip_image)
                                     ip_ctrls.append(ip_image)
                                     with gr.Column(visible=modules.config.default_image_prompt_advanced_checkbox) as ad_col:
@@ -259,16 +274,39 @@ with shared.gradio_root:
                         with gr.Row():
                             with gr.Column():
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
+                                inpaint_eraser_state = gr.State(False)
+                                with gr.Row():
+                                    inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase Mask', elem_id='inpaint_eraser_toggle', elem_classes='type_row_half')
+                                    inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear Mask', elem_id='inpaint_clear_mask', elem_classes='type_row_half')
+                                    inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn', elem_classes='type_row_half')
+                                    inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
+
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
-                                inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method')
+                                inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method', elem_id='inpaint_mode_selector')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
-                                outpaint_selections = gr.CheckboxGroup(choices=['Left', 'Right', 'Top', 'Bottom'], value=[], label='Outpaint Direction')
+                                outpaint_selections = gr.CheckboxGroup(choices=['Left', 'Right', 'Top', 'Bottom'], value=[], label='Outpaint Direction', elem_id='outpaint_selections')
                                 example_inpaint_prompts = gr.Dataset(samples=modules.config.example_inpaint_prompts,
                                                                      label='Additional Prompt Quick List',
                                                                      components=[inpaint_additional_prompt],
                                                                      visible=False)
                                 gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Documentation</a>')
                                 example_inpaint_prompts.click(lambda x: x[0], inputs=example_inpaint_prompts, outputs=inpaint_additional_prompt, show_progress=False, queue=False)
+
+                                def toggle_eraser(is_erasing):
+                                    new_state = not is_erasing
+                                    color = '#000000' if new_state else '#FFFFFF'
+                                    label = '\u270f\ufe0f Draw Mask' if new_state else '\u2b1c Erase Mask'
+                                    return new_state, gr.update(brush_color=color), gr.update(value=label)
+
+                                inpaint_eraser_toggle.click(
+                                    toggle_eraser, inputs=inpaint_eraser_state,
+                                    outputs=[inpaint_eraser_state, inpaint_input_image, inpaint_eraser_toggle],
+                                    queue=False, show_progress=False)
+
+                                inpaint_clear_mask.click(
+                                    fn=lambda: None,
+                                    _js='() => { const el = document.querySelector("#inpaint_canvas"); if(el) { const undoBtn = el.querySelector("button[aria-label=\\"Undo\\"]"); if(undoBtn) { for(let i=0;i<50;i++) undoBtn.click(); } } }',
+                                    queue=False, show_progress=False)
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
                                 inpaint_mask_image = grh.Image(label='Mask Upload', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", mask_opacity=1, elem_id='inpaint_mask_canvas')
@@ -335,7 +373,9 @@ with shared.gradio_root:
                     with gr.Tab(label='Describe', id='describe_tab') as describe_tab:
                         with gr.Row():
                             with gr.Column():
-                                describe_input_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False)
+                                describe_input_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, elem_id='describe_input_image')
+                                describe_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_classes='type_row_half')
+                                describe_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#describe_input_image"); }', queue=False, show_progress=False)
                             with gr.Column():
                                 describe_methods = gr.CheckboxGroup(
                                     label='Content Type',
@@ -356,7 +396,9 @@ with shared.gradio_root:
                     with gr.Tab(label='Enhance', id='enhance_tab') as enhance_tab:
                         with gr.Row():
                             with gr.Column():
-                                enhance_input_image = grh.Image(label='Use with Enhance, skips image generation', source='upload', type='numpy')
+                                enhance_input_image = grh.Image(label='Use with Enhance, skips image generation', source='upload', type='numpy', elem_id='enhance_input_image')
+                                enhance_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_classes='type_row_half')
+                                enhance_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#enhance_input_image"); }', queue=False, show_progress=False)
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/3281" target="_blank">\U0001F4D4 Documentation</a>')
 
                     with gr.Tab(label='Metadata', id='metadata_tab') as metadata_tab:
@@ -854,6 +896,20 @@ with shared.gradio_root:
                                                   outputs=inpaint_input_image,
                                                   queue=False, show_progress=False)
 
+                        # Bidirectional sync: main UI mixing toggles <-> Advanced > Control toggles
+                        mixing_image_prompt_and_vary_upscale_main.change(
+                            lambda x: x, inputs=mixing_image_prompt_and_vary_upscale_main,
+                            outputs=mixing_image_prompt_and_vary_upscale, queue=False, show_progress=False)
+                        mixing_image_prompt_and_inpaint_main.change(
+                            lambda x: x, inputs=mixing_image_prompt_and_inpaint_main,
+                            outputs=mixing_image_prompt_and_inpaint, queue=False, show_progress=False)
+                        mixing_image_prompt_and_vary_upscale.change(
+                            lambda x: x, inputs=mixing_image_prompt_and_vary_upscale,
+                            outputs=mixing_image_prompt_and_vary_upscale_main, queue=False, show_progress=False)
+                        mixing_image_prompt_and_inpaint.change(
+                            lambda x: x, inputs=mixing_image_prompt_and_inpaint,
+                            outputs=mixing_image_prompt_and_inpaint_main, queue=False, show_progress=False)
+
                     with gr.Tab(label='FreeU'):
                         freeu_enabled = gr.Checkbox(label='Enabled', value=False)
                         freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01, value=1.01)
@@ -887,6 +943,63 @@ with shared.gradio_root:
                                     queue=False, show_progress=False)
 
         state_is_generating = gr.State(False)
+
+        def handle_delete_image(file_path_request, current_gallery):
+            import re
+            if not file_path_request or file_path_request.strip() == '':
+                return gr.update(), gr.update()
+            match = re.search(r'/file=(.+?)(?:\?|$)', file_path_request)
+            target_path = match.group(1) if match else file_path_request.strip()
+            target_path = os.path.abspath(target_path)
+            outputs_path = os.path.abspath(modules.config.path_outputs)
+            if not target_path.startswith(outputs_path):
+                print(f'Delete rejected: {target_path} is not in outputs directory')
+                return gr.update(), gr.update()
+            if os.path.exists(target_path):
+                os.remove(target_path)
+                print(f'Deleted: {target_path}')
+            else:
+                print(f'File not found for deletion: {target_path}')
+            if current_gallery:
+                updated = [img for img in current_gallery
+                           if not (isinstance(img, str) and os.path.abspath(img) == target_path)]
+                return gr.update(value=updated), gr.update(value='')
+            return gr.update(), gr.update(value='')
+
+        delete_image_request.input(
+            handle_delete_image,
+            inputs=[delete_image_request, gallery],
+            outputs=[gallery, delete_image_request],
+            queue=False, show_progress=False)
+
+        def format_queue_html(q):
+            if not q:
+                return gr.update(visible=False, value='')
+            items = ''.join(
+                f'<div style="padding:4px 8px;margin:2px 0;background:var(--background-fill-secondary);'
+                f'border-radius:4px;font-size:0.85em;">'
+                f'{i+1}. {p[:80]}{"..." if len(p) > 80 else ""}</div>'
+                for i, p in enumerate(q))
+            return gr.update(visible=True,
+                value=f'<div style="max-height:120px;overflow-y:auto;"><b>Queue ({len(q)}):</b>{items}</div>')
+
+        def add_to_queue(current_queue, prompt_text):
+            if not prompt_text or prompt_text.strip() == '':
+                return current_queue, format_queue_html(current_queue)
+            new_queue = current_queue + [prompt_text.strip()]
+            return new_queue, format_queue_html(new_queue)
+
+        def check_queue_and_continue(current_queue, current_prompt):
+            if not current_queue:
+                return current_queue, current_prompt, format_queue_html([])
+            new_queue = current_queue[1:]
+            next_prompt = current_queue[0]
+            return new_queue, next_prompt, format_queue_html(new_queue)
+
+        queue_button.click(
+            add_to_queue, inputs=[prompt_queue, prompt],
+            outputs=[prompt_queue, prompt_queue_display],
+            queue=False, show_progress=False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, style_selections,
                              performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,
@@ -1046,7 +1159,12 @@ with shared.gradio_root:
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
             .then(fn=update_history_link, outputs=history_link) \
-            .then(fn=lambda: None, _js='playNotification').then(fn=lambda: None, _js='refresh_grid_delayed')
+            .then(fn=lambda: None, _js='playNotification').then(fn=lambda: None, _js='refresh_grid_delayed') \
+            .then(fn=check_queue_and_continue, inputs=[prompt_queue, prompt],
+                  outputs=[prompt_queue, prompt, prompt_queue_display], queue=False, show_progress=False) \
+            .then(fn=lambda: None,
+                  _js='() => { setTimeout(() => { let d = document.getElementById("prompt_queue_display"); if(d && d.offsetParent !== null && d.innerText.includes("Queue")) { let b = document.getElementById("generate_button"); if(b && !b.classList.contains("hidden")) b.click(); } }, 1000); }',
+                  queue=False, show_progress=False)
 
         reset_button.click(lambda: [worker.AsyncTask(args=[]), False, gr.update(visible=True, interactive=True)] +
                                    [gr.update(visible=False)] * 6 +

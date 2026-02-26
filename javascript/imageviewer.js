@@ -89,6 +89,28 @@ function saveImage() {
 
 }
 
+function deleteCurrentImage() {
+    var modalImage = gradioApp().getElementById("modalImage");
+    if (!modalImage || !modalImage.src) return;
+
+    if (!confirm('Delete this image permanently?')) return;
+
+    var deleteInput = document.querySelector('#delete_image_request textarea');
+    if (deleteInput) {
+        deleteInput.value = modalImage.src;
+        var e = new Event("input", { bubbles: true });
+        Object.defineProperty(e, "target", { value: deleteInput });
+        deleteInput.dispatchEvent(e);
+    }
+
+    var galleryButtons = all_gallery_buttons();
+    if (galleryButtons.length > 1) {
+        modalNextImage(new Event('click'));
+    } else {
+        closeModal();
+    }
+}
+
 function modalSaveImage(event) {
     event.stopPropagation();
 }
@@ -107,6 +129,9 @@ function modalKeyHandler(event) {
     switch (event.key) {
     case "s":
         saveImage();
+        break;
+    case "Delete":
+        deleteCurrentImage();
         break;
     case "ArrowLeft":
         modalPrevImage(event);
@@ -217,6 +242,16 @@ document.addEventListener("DOMContentLoaded", function() {
     // modalSave.addEventListener("click", modalSaveImage, true);
     // modalSave.title = "Save Image(s)";
     // modalControls.appendChild(modalSave);
+
+    const modalDelete = document.createElement('span');
+    modalDelete.className = 'modalDelete cursor';
+    modalDelete.innerHTML = '&#128465;';
+    modalDelete.addEventListener('click', function(event) {
+        deleteCurrentImage();
+        event.stopPropagation();
+    }, true);
+    modalDelete.title = "Delete image (Del)";
+    modalControls.appendChild(modalDelete);
 
     const modalClose = document.createElement('span');
     modalClose.className = 'modalClose cursor';
