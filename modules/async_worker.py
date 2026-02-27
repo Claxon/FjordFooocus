@@ -52,6 +52,7 @@ class AsyncTask:
         self.uov_method = args.pop()
         self.uov_input_image = args.pop()
         self.outpaint_selections = args.pop()
+        self.outpaint_expansion = args.pop()
         self.inpaint_input_image = args.pop()
         self.inpaint_additional_prompt = args.pop()
         self.inpaint_mask_image_upload = args.pop()
@@ -544,24 +545,25 @@ def worker():
 
     def apply_outpaint(async_task, inpaint_image, inpaint_mask):
         if len(async_task.outpaint_selections) > 0:
+            expansion = float(async_task.outpaint_expansion) / 100.0
             H, W, C = inpaint_image.shape
             if 'top' in async_task.outpaint_selections:
-                inpaint_image = np.pad(inpaint_image, [[int(H * 0.3), 0], [0, 0], [0, 0]], mode='edge')
-                inpaint_mask = np.pad(inpaint_mask, [[int(H * 0.3), 0], [0, 0]], mode='constant',
+                inpaint_image = np.pad(inpaint_image, [[int(H * expansion), 0], [0, 0], [0, 0]], mode='edge')
+                inpaint_mask = np.pad(inpaint_mask, [[int(H * expansion), 0], [0, 0]], mode='constant',
                                       constant_values=255)
             if 'bottom' in async_task.outpaint_selections:
-                inpaint_image = np.pad(inpaint_image, [[0, int(H * 0.3)], [0, 0], [0, 0]], mode='edge')
-                inpaint_mask = np.pad(inpaint_mask, [[0, int(H * 0.3)], [0, 0]], mode='constant',
+                inpaint_image = np.pad(inpaint_image, [[0, int(H * expansion)], [0, 0], [0, 0]], mode='edge')
+                inpaint_mask = np.pad(inpaint_mask, [[0, int(H * expansion)], [0, 0]], mode='constant',
                                       constant_values=255)
 
             H, W, C = inpaint_image.shape
             if 'left' in async_task.outpaint_selections:
-                inpaint_image = np.pad(inpaint_image, [[0, 0], [int(W * 0.3), 0], [0, 0]], mode='edge')
-                inpaint_mask = np.pad(inpaint_mask, [[0, 0], [int(W * 0.3), 0]], mode='constant',
+                inpaint_image = np.pad(inpaint_image, [[0, 0], [int(W * expansion), 0], [0, 0]], mode='edge')
+                inpaint_mask = np.pad(inpaint_mask, [[0, 0], [int(W * expansion), 0]], mode='constant',
                                       constant_values=255)
             if 'right' in async_task.outpaint_selections:
-                inpaint_image = np.pad(inpaint_image, [[0, 0], [0, int(W * 0.3)], [0, 0]], mode='edge')
-                inpaint_mask = np.pad(inpaint_mask, [[0, 0], [0, int(W * 0.3)]], mode='constant',
+                inpaint_image = np.pad(inpaint_image, [[0, 0], [0, int(W * expansion)], [0, 0]], mode='edge')
+                inpaint_mask = np.pad(inpaint_mask, [[0, 0], [0, int(W * expansion)]], mode='constant',
                                       constant_values=255)
 
             inpaint_image = np.ascontiguousarray(inpaint_image.copy())

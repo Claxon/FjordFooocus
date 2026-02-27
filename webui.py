@@ -115,13 +115,13 @@ def sort_enhance_images(images, task):
 def inpaint_mode_change(mode, inpaint_engine_version):
     assert mode in modules.flags.inpaint_options
 
-    # inpaint_additional_prompt, outpaint_selections, example_inpaint_prompts,
+    # inpaint_additional_prompt, outpaint_selections, outpaint_expansion, example_inpaint_prompts,
     # inpaint_disable_initial_latent, inpaint_engine,
     # inpaint_strength, inpaint_respective_field
 
     if mode == modules.flags.inpaint_option_detail:
         return [
-            gr.update(visible=True), gr.update(visible=False, value=[]),
+            gr.update(visible=True), gr.update(visible=False, value=[]), gr.update(visible=False),
             gr.Dataset.update(visible=True, samples=modules.config.example_inpaint_prompts),
             False, 'None', 0.5, 0.0
         ]
@@ -131,13 +131,13 @@ def inpaint_mode_change(mode, inpaint_engine_version):
 
     if mode == modules.flags.inpaint_option_modify:
         return [
-            gr.update(visible=True), gr.update(visible=False, value=[]),
+            gr.update(visible=True), gr.update(visible=False, value=[]), gr.update(visible=False),
             gr.Dataset.update(visible=False, samples=modules.config.example_inpaint_prompts),
             True, inpaint_engine_version, 1.0, 0.0
         ]
 
     return [
-        gr.update(visible=False, value=''), gr.update(visible=True),
+        gr.update(visible=False, value=''), gr.update(visible=True), gr.update(visible=True),
         gr.Dataset.update(visible=False, samples=modules.config.example_inpaint_prompts),
         False, inpaint_engine_version, 1.0, 0.618
     ]
@@ -286,6 +286,7 @@ with shared.gradio_root:
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method', elem_id='inpaint_mode_selector')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
                                 outpaint_selections = gr.CheckboxGroup(choices=['Left', 'Right', 'Top', 'Bottom'], value=[], label='Outpaint Direction', elem_id='outpaint_selections')
+                                outpaint_expansion = gr.Slider(label='Outpaint Expansion (%)', minimum=1, maximum=200, value=30, step=1, elem_id='outpaint_expansion')
                                 example_inpaint_prompts = gr.Dataset(samples=modules.config.example_inpaint_prompts,
                                                                      label='Additional Prompt Quick List',
                                                                      components=[inpaint_additional_prompt],
@@ -311,6 +312,9 @@ with shared.gradio_root:
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
                                 inpaint_mask_image = grh.Image(label='Mask Upload', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", mask_opacity=1, elem_id='inpaint_mask_canvas')
+                                with gr.Row():
+                                    mask_paste_btn = gr.Button(value='\U0001f4cb Paste Mask', elem_id='mask_paste_btn', elem_classes='type_row_half')
+                                    mask_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_mask_canvas"); }', queue=False, show_progress=False)
                                 invert_mask_checkbox = gr.Checkbox(label='Invert Mask When Generating', value=modules.config.default_invert_mask_checkbox)
                                 inpaint_mask_model = gr.Dropdown(label='Mask generation model',
                                                                  choices=flags.inpaint_mask_models,
@@ -566,7 +570,7 @@ with shared.gradio_root:
                         ]]
 
                         enhance_inpaint_mode.change(inpaint_mode_change, inputs=[enhance_inpaint_mode, inpaint_engine_state], outputs=[
-                            inpaint_additional_prompt, outpaint_selections, example_inpaint_prompts,
+                            inpaint_additional_prompt, outpaint_selections, outpaint_expansion, example_inpaint_prompts,
                             enhance_inpaint_disable_initial_latent, enhance_inpaint_engine,
                             enhance_inpaint_strength, enhance_inpaint_respective_field
                         ], show_progress=False, queue=False)
@@ -1085,7 +1089,7 @@ with shared.gradio_root:
             .then(fn=lambda: None, _js='refresh_grid_delayed', queue=False, show_progress=False)
 
         inpaint_mode.change(inpaint_mode_change, inputs=[inpaint_mode, inpaint_engine_state], outputs=[
-            inpaint_additional_prompt, outpaint_selections, example_inpaint_prompts,
+            inpaint_additional_prompt, outpaint_selections, outpaint_expansion, example_inpaint_prompts,
             inpaint_disable_initial_latent, inpaint_engine,
             inpaint_strength, inpaint_respective_field
         ], show_progress=False, queue=False)
@@ -1094,8 +1098,8 @@ with shared.gradio_root:
         default_inpaint_ctrls = [inpaint_mode, inpaint_disable_initial_latent, inpaint_engine, inpaint_strength, inpaint_respective_field]
         for mode, disable_initial_latent, engine, strength, respective_field in [default_inpaint_ctrls] + enhance_inpaint_update_ctrls:
             shared.gradio_root.load(inpaint_mode_change, inputs=[mode, inpaint_engine_state], outputs=[
-                inpaint_additional_prompt, outpaint_selections, example_inpaint_prompts, disable_initial_latent,
-                engine, strength, respective_field
+                inpaint_additional_prompt, outpaint_selections, outpaint_expansion, example_inpaint_prompts,
+                disable_initial_latent, engine, strength, respective_field
             ], show_progress=False, queue=False)
 
         generate_mask_button.click(fn=generate_mask,
@@ -1115,7 +1119,7 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image]
+        ctrls += [outpaint_selections, outpaint_expansion, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image]
         ctrls += [disable_preview, disable_intermediate_results, disable_seed_increment, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg, clip_skip]
         ctrls += [sampler_name, scheduler_name, vae_name]
