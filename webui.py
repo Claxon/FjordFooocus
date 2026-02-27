@@ -229,8 +229,11 @@ with shared.gradio_root:
                         with gr.Row():
                             with gr.Column():
                                 uov_input_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, elem_id='uov_input_image')
-                                uov_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_id='uov_paste_btn', elem_classes='type_row_half')
+                                with gr.Row():
+                                    uov_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_id='uov_paste_btn', elem_classes='type_row_half')
+                                    uov_camera_btn = gr.Button(value='\U0001f4f7 Camera', elem_id='uov_camera_btn', elem_classes='type_row_half')
                                 uov_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#uov_input_image"); }', queue=False, show_progress=False)
+                                uov_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#uov_input_image"); }', queue=False, show_progress=False)
                             with gr.Column():
                                 uov_method = gr.Radio(label='Upscale or Variation:', choices=flags.uov_list, value=modules.config.default_uov_method)
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Documentation</a>')
@@ -425,8 +428,11 @@ with shared.gradio_root:
                         with gr.Row():
                             with gr.Column():
                                 enhance_input_image = grh.Image(label='Use with Enhance, skips image generation', source='upload', type='numpy', elem_id='enhance_input_image')
-                                enhance_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_classes='type_row_half')
+                                with gr.Row():
+                                    enhance_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_classes='type_row_half')
+                                    enhance_camera_btn = gr.Button(value='\U0001f4f7 Camera', elem_id='enhance_camera_btn', elem_classes='type_row_half')
                                 enhance_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#enhance_input_image"); }', queue=False, show_progress=False)
+                                enhance_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#enhance_input_image"); }', queue=False, show_progress=False)
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/3281" target="_blank">\U0001F4D4 Documentation</a>')
 
                     with gr.Tab(label='Metadata', id='metadata_tab') as metadata_tab:
@@ -690,6 +696,8 @@ with shared.gradio_root:
 
                 history_link = gr.HTML()
                 shared.gradio_root.load(update_history_link, outputs=history_link, queue=False, show_progress=False)
+
+                gr.HTML(value='<div id="camera_device_settings"></div>')
 
             with gr.Tab(label='Styles', elem_classes=['style_selections_tab']):
                 style_sorter.try_load_sorted_styles(

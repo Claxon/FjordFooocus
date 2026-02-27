@@ -678,3 +678,81 @@ div:has(> #positive_prompt) {
 #fooocus_toast.fade-out {
   opacity: 0;
 }
+
+/* ===== Camera Preview Overlay ===== */
+#camera_preview_overlay {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 260px;
+  background: var(--background-fill-primary, #1a1a2e);
+  border: 2px solid var(--border-color-primary, #444);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  z-index: 999;
+  display: none;
+  overflow: hidden;
+}
+#camera_preview_overlay video {
+  width: 100%;
+  display: block;
+  border-radius: 8px 8px 0 0;
+  background: #000;
+  min-height: 140px;
+}
+#camera_preview_overlay .camera-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+}
+#camera_preview_overlay .camera-controls select {
+  flex: 1;
+  background: var(--background-fill-secondary, #1a1a2e);
+  color: var(--body-text-color, #e0e0e0);
+  border: 1px solid var(--border-color-primary, #444);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.camera-close-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.camera-close-btn:hover {
+  background: rgba(204,34,34,0.8);
+}
+.camera-status {
+  font-size: 11px;
+  color: var(--body-text-color-subdued, #aaa);
+  padding: 2px 6px 4px;
+  text-align: center;
+}
+/* Active camera button override */
+.camera-active {
+  background: #cc2222 !important;
+  color: white !important;
+  border-color: #cc2222 !important;
+}
+@media (max-width: 768px) {
+  #camera_preview_overlay {
+    width: 180px;
+    bottom: 10px;
+    right: 10px;
+  }
+}
