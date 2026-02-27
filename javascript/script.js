@@ -147,15 +147,19 @@ function addObserverIfDesiredNodeAvailable(querySelector, callback) {
  * Inpaint canvas eraser system:
  *  - Right mouse button = erase (always)
  *  - Left mouse button = draw (or erase if toggle is active, for touch)
- *  - Eraser uses canvas globalCompositeOperation='destination-out' to
- *    truly remove pixels from the mask overlay
- *  - Only patches drawing canvases, NOT the interface/cursor canvas
- *    (z-index >= 15) so the brush preview circle stays visible
+ *  - Eraser works by patching drawImage() on the canvas commit step:
+ *    Gradio draws the stroke normally (white) on a temp canvas, then
+ *    commits via drawImage(temp → drawing). We intercept that drawImage
+ *    and use 'destination-out' so the white stroke SHAPE erases from
+ *    the persistent mask instead of adding to it.
+ *  - The erase state is kept alive for 200ms after mouseup so it
+ *    survives through Gradio's asynchronous commit.
  */
 var inpaintRightButtonDown = false;
+var inpaintCurrentStrokeIsErase = false;
 
 function isInpaintEraserActive() {
-    if (inpaintRightButtonDown) return true;
+    if (inpaintRightButtonDown || inpaintCurrentStrokeIsErase) return true;
     var el = document.getElementById('inpaint_eraser_toggle');
     if (!el) return false;
     return el.textContent.indexOf('Draw') !== -1;
@@ -170,11 +174,20 @@ function setupRightClickEraser(container) {
     });
 
     container.addEventListener('mousedown', function(e) {
-        if (e.button === 2) inpaintRightButtonDown = true;
+        if (e.button === 2) {
+            inpaintRightButtonDown = true;
+            inpaintCurrentStrokeIsErase = true;
+        }
     }, true);
 
     container.addEventListener('mouseup', function(e) {
-        if (e.button === 2) inpaintRightButtonDown = false;
+        if (e.button === 2) {
+            inpaintRightButtonDown = false;
+            // Keep erase state alive through Gradio's commit (drawImage)
+            setTimeout(function() {
+                inpaintCurrentStrokeIsErase = false;
+            }, 200);
+        }
     }, true);
 
     container.addEventListener('mouseleave', function() {
@@ -204,18 +217,20 @@ function patchCanvasForEraser() {
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        var origStroke = ctx.stroke;
-        ctx.stroke = function() {
-            this.globalCompositeOperation = isInpaintEraserActive()
-                ? 'destination-out' : 'source-over';
-            return origStroke.apply(this, arguments);
-        };
-
-        var origFill = ctx.fill;
-        ctx.fill = function() {
-            this.globalCompositeOperation = isInpaintEraserActive()
-                ? 'destination-out' : 'source-over';
-            return origFill.apply(this, arguments);
+        // Patch drawImage: intercepts the commit step where Gradio copies
+        // the temp canvas (with the white stroke) onto the drawing canvas.
+        // When erasing, destination-out uses the stroke's alpha to erase
+        // from the persistent mask instead of adding to it.
+        // Only activates when the source is a Canvas (the commit operation),
+        // not when loading images or backgrounds.
+        var origDrawImage = ctx.drawImage;
+        ctx.drawImage = function(source) {
+            if (isInpaintEraserActive() && source instanceof HTMLCanvasElement) {
+                this.globalCompositeOperation = 'destination-out';
+            }
+            var result = origDrawImage.apply(this, arguments);
+            this.globalCompositeOperation = 'source-over';
+            return result;
         };
     });
 }
