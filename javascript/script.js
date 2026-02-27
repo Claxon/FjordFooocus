@@ -163,6 +163,62 @@ onUiLoaded(function() {
 });
 
 /**
+ * Inpaint eraser: patch the sketch canvas to use 'destination-out'
+ * composite operation when eraser mode is active. This makes the
+ * eraser truly remove the white mask overlay (making pixels transparent)
+ * instead of painting black on top.
+ *
+ * Detection: when the erase toggle button shows "Draw", eraser is active
+ * (the label shows what clicking will switch TO).
+ */
+function isInpaintEraserActive() {
+    var el = document.getElementById('inpaint_eraser_toggle');
+    if (!el) return false;
+    // Button shows "✏️ Draw" when eraser is currently active
+    return el.textContent.indexOf('Draw') !== -1;
+}
+
+function patchCanvasForEraser() {
+    var container = document.getElementById('inpaint_canvas');
+    if (!container) return;
+
+    var canvases = container.querySelectorAll('canvas');
+    canvases.forEach(function(canvas) {
+        if (canvas._eraserPatched) return;
+        canvas._eraserPatched = true;
+
+        var ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Wrap stroke() to set composite operation before each stroke
+        var origStroke = ctx.stroke;
+        ctx.stroke = function() {
+            if (isInpaintEraserActive()) {
+                this.globalCompositeOperation = 'destination-out';
+            } else {
+                this.globalCompositeOperation = 'source-over';
+            }
+            return origStroke.apply(this, arguments);
+        };
+
+        // Wrap fill() for the same reason
+        var origFill = ctx.fill;
+        ctx.fill = function() {
+            if (isInpaintEraserActive()) {
+                this.globalCompositeOperation = 'destination-out';
+            } else {
+                this.globalCompositeOperation = 'source-over';
+            }
+            return origFill.apply(this, arguments);
+        };
+    });
+}
+
+onAfterUiUpdate(function() {
+    patchCanvasForEraser();
+});
+
+/**
  * Show reset button on toast "Connection errored out."
  */
 addObserverIfDesiredNodeAvailable(".toast-wrap", function(added) {

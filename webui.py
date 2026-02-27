@@ -296,9 +296,10 @@ with shared.gradio_root:
 
                                 def toggle_eraser(is_erasing):
                                     new_state = not is_erasing
-                                    color = '#000000' if new_state else '#FFFFFF'
+                                    # Don't change brush_color — eraser is handled by JS
+                                    # canvas composite operation (destination-out)
                                     label = '\u270f\ufe0f Draw' if new_state else '\u2b1c Erase'
-                                    return new_state, gr.update(brush_color=color), gr.update(value=label)
+                                    return new_state, gr.update(), gr.update(value=label)
 
                                 inpaint_eraser_toggle.click(
                                     toggle_eraser, inputs=inpaint_eraser_state,
