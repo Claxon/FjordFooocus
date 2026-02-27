@@ -643,10 +643,14 @@ onUiLoaded(async() => {
         // ---- Touch gesture support ----
         // Single finger = paint (default Gradio behavior, no intervention)
         // Two fingers = pan + pinch zoom
-        // When second finger arrives, undo any accidental paint stroke
-        // from the first finger, then block further painting.
+        //
+        // Undo logic: only undo when a second finger arrives while the
+        // first finger is still held down (mid-stroke). If the user
+        // lifts their finger first (completing the stroke), a subsequent
+        // two-finger gesture will NOT undo the previous stroke.
         let touchState = {
-            active: false,
+            active: false,              // true while in two-finger gesture mode
+            singleFingerDown: false,    // true while one finger is held (painting)
             lastTouches: null,
             lastDist: 0,
         };
@@ -665,17 +669,26 @@ onUiLoaded(async() => {
         }
 
         targetElement.addEventListener("touchstart", function(e) {
+            if (e.touches.length === 1 && !touchState.active) {
+                // Single finger down — potential paint stroke starting
+                touchState.singleFingerDown = true;
+            }
+
             if (e.touches.length >= 2) {
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Undo any accidental paint from the first finger
-                // by clicking Gradio's Undo button
-                if (!touchState.active) {
+                // Only undo if a single finger was already down (mid-stroke)
+                // and a second finger just joined — the first finger's
+                // accidental paint needs to be reverted.
+                // If singleFingerDown is false (both fingers arrived at once,
+                // or after a completed stroke), don't undo anything.
+                if (!touchState.active && touchState.singleFingerDown) {
                     const undoBtn = targetElement.querySelector('button[aria-label="Undo"]');
                     if (undoBtn) undoBtn.click();
                 }
 
+                touchState.singleFingerDown = false;
                 touchState.active = true;
                 touchState.lastTouches = [
                     { x: e.touches[0].clientX, y: e.touches[0].clientY },
@@ -732,13 +745,17 @@ onUiLoaded(async() => {
 
         targetElement.addEventListener("touchend", function(e) {
             if (e.touches.length < 2 && touchState.active) {
-                // Stop pan/zoom mode. Prevent this touchend from
-                // being treated as a paint end by Gradio.
+                // Exiting two-finger gesture mode. Prevent this touchend
+                // from being treated as a paint end by Gradio.
                 e.preventDefault();
                 e.stopPropagation();
                 touchState.active = false;
                 touchState.lastTouches = null;
                 touchState.lastDist = 0;
+            }
+            if (e.touches.length === 0) {
+                // All fingers lifted — any in-progress paint is now committed
+                touchState.singleFingerDown = false;
             }
         }, { passive: false, capture: true });
     }
