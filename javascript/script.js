@@ -144,78 +144,140 @@ function addObserverIfDesiredNodeAvailable(querySelector, callback) {
 }
 
 /**
- * Move the inpaint toolbar (Erase/Clear/Paste) inside the canvas
- * container so it can be absolutely positioned over the canvas.
+ * Inpaint canvas eraser system:
+ *  - Right mouse button = erase (always)
+ *  - Left mouse button = draw (or erase if toggle is active, for touch)
+ *  - Eraser uses canvas globalCompositeOperation='destination-out' to
+ *    truly remove pixels from the mask overlay
+ *  - Only patches drawing canvases, NOT the interface/cursor canvas
+ *    (z-index 15) so the brush preview circle stays visible
  */
-onUiLoaded(function() {
-    function moveToolbar() {
-        var canvas = document.getElementById('inpaint_canvas');
-        var toolbar = document.getElementById('inpaint_toolbar');
-        if (canvas && toolbar && toolbar.parentElement !== canvas) {
-            canvas.style.position = 'relative';
-            canvas.appendChild(toolbar);
-        }
-    }
-    moveToolbar();
-    // Retry in case elements aren't rendered yet
-    setTimeout(moveToolbar, 500);
-    setTimeout(moveToolbar, 2000);
-});
+var inpaintRightButtonDown = false;
 
-/**
- * Inpaint eraser: patch the sketch canvas to use 'destination-out'
- * composite operation when eraser mode is active. This makes the
- * eraser truly remove the white mask overlay (making pixels transparent)
- * instead of painting black on top.
- *
- * Detection: when the erase toggle button shows "Draw", eraser is active
- * (the label shows what clicking will switch TO).
- */
 function isInpaintEraserActive() {
+    // Right mouse button always erases
+    if (inpaintRightButtonDown) return true;
+    // Toggle button fallback (for touch devices)
     var el = document.getElementById('inpaint_eraser_toggle');
     if (!el) return false;
-    // Button shows "✏️ Draw" when eraser is currently active
     return el.textContent.indexOf('Draw') !== -1;
+}
+
+function setupRightClickEraser(container) {
+    if (!container || container._rightClickPatched) return;
+    container._rightClickPatched = true;
+
+    // Prevent context menu on right-click inside canvas
+    container.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+    });
+
+    // Track right mouse button state
+    container.addEventListener('mousedown', function(e) {
+        if (e.button === 2) {
+            inpaintRightButtonDown = true;
+        }
+    }, true);
+
+    container.addEventListener('mouseup', function(e) {
+        if (e.button === 2) {
+            inpaintRightButtonDown = false;
+        }
+    }, true);
+
+    container.addEventListener('mouseleave', function() {
+        inpaintRightButtonDown = false;
+    }, true);
+
+    // Also listen globally for mouseup in case mouse leaves canvas while held
+    document.addEventListener('mouseup', function(e) {
+        if (e.button === 2) {
+            inpaintRightButtonDown = false;
+        }
+    });
 }
 
 function patchCanvasForEraser() {
     var container = document.getElementById('inpaint_canvas');
     if (!container) return;
 
+    setupRightClickEraser(container);
+
     var canvases = container.querySelectorAll('canvas');
     canvases.forEach(function(canvas) {
         if (canvas._eraserPatched) return;
         canvas._eraserPatched = true;
 
+        // Skip the interface canvas (brush cursor preview, z-index 15)
+        // so the brush circle stays visible in erase mode
+        var zIndex = parseInt(window.getComputedStyle(canvas).zIndex) || 0;
+        if (zIndex >= 15) return;
+
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Wrap stroke() to set composite operation before each stroke
         var origStroke = ctx.stroke;
         ctx.stroke = function() {
-            if (isInpaintEraserActive()) {
-                this.globalCompositeOperation = 'destination-out';
-            } else {
-                this.globalCompositeOperation = 'source-over';
-            }
+            this.globalCompositeOperation = isInpaintEraserActive()
+                ? 'destination-out' : 'source-over';
             return origStroke.apply(this, arguments);
         };
 
-        // Wrap fill() for the same reason
         var origFill = ctx.fill;
         ctx.fill = function() {
-            if (isInpaintEraserActive()) {
-                this.globalCompositeOperation = 'destination-out';
-            } else {
-                this.globalCompositeOperation = 'source-over';
-            }
+            this.globalCompositeOperation = isInpaintEraserActive()
+                ? 'destination-out' : 'source-over';
             return origFill.apply(this, arguments);
         };
     });
 }
 
+/**
+ * Move the inpaint toolbar into the canvas and tag the Gradio
+ * built-in toolbar for CSS styling as a vertical sidebar.
+ */
+function setupInpaintToolbars() {
+    var canvas = document.getElementById('inpaint_canvas');
+    if (!canvas) return;
+
+    // Move our custom toolbar inside the canvas container
+    var toolbar = document.getElementById('inpaint_toolbar');
+    if (toolbar && toolbar.parentElement !== canvas) {
+        canvas.style.position = 'relative';
+        canvas.appendChild(toolbar);
+    }
+
+    // Tag the Gradio built-in icon toolbar for vertical sidebar styling
+    var iconButtons = canvas.querySelectorAll('button[aria-label]');
+    if (iconButtons.length > 0) {
+        var gradioToolbar = iconButtons[0].parentElement;
+        if (gradioToolbar && !gradioToolbar.classList.contains('inpaint-sidebar')) {
+            gradioToolbar.classList.add('inpaint-sidebar');
+        }
+    }
+
+    // Also tag the mask upload canvas toolbar
+    var maskCanvas = document.getElementById('inpaint_mask_canvas');
+    if (maskCanvas) {
+        var maskButtons = maskCanvas.querySelectorAll('button[aria-label]');
+        if (maskButtons.length > 0) {
+            var maskToolbar = maskButtons[0].parentElement;
+            if (maskToolbar && !maskToolbar.classList.contains('inpaint-sidebar')) {
+                maskToolbar.classList.add('inpaint-sidebar');
+            }
+        }
+    }
+}
+
+onUiLoaded(function() {
+    setupInpaintToolbars();
+    setTimeout(setupInpaintToolbars, 500);
+    setTimeout(setupInpaintToolbars, 2000);
+});
+
 onAfterUiUpdate(function() {
     patchCanvasForEraser();
+    setupInpaintToolbars();
 });
 
 /**
