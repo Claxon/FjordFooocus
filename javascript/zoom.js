@@ -639,6 +639,97 @@ onUiLoaded(async() => {
         });
 
         gradioApp().addEventListener("mousemove", handleMoveByKey);
+
+        // ---- Touch gesture support ----
+        // Single finger = paint (default Gradio behavior, no intervention needed)
+        // Two fingers = pan
+        // Pinch (two fingers distance change) = zoom
+        let touchState = {
+            active: false,
+            lastTouches: null,
+            lastDist: 0,
+            isPanning: false,
+        };
+
+        function getTouchDist(t1, t2) {
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getTouchCenter(t1, t2) {
+            return {
+                x: (t1.clientX + t2.clientX) / 2,
+                y: (t1.clientY + t2.clientY) / 2
+            };
+        }
+
+        targetElement.addEventListener("touchstart", function(e) {
+            if (e.touches.length === 2) {
+                // Two-finger gesture: prevent default to stop painting
+                e.preventDefault();
+                touchState.active = true;
+                touchState.isPanning = true;
+                touchState.lastTouches = [
+                    { x: e.touches[0].clientX, y: e.touches[0].clientY },
+                    { x: e.touches[1].clientX, y: e.touches[1].clientY }
+                ];
+                touchState.lastDist = getTouchDist(e.touches[0], e.touches[1]);
+            }
+        }, { passive: false });
+
+        targetElement.addEventListener("touchmove", function(e) {
+            if (e.touches.length === 2 && touchState.active) {
+                e.preventDefault();
+
+                const t0 = e.touches[0];
+                const t1 = e.touches[1];
+                const newDist = getTouchDist(t0, t1);
+                const center = getTouchCenter(t0, t1);
+
+                // Pinch zoom
+                if (touchState.lastDist > 0) {
+                    const scale = newDist / touchState.lastDist;
+                    if (Math.abs(scale - 1) > 0.01) {
+                        const newZoom = elemData[elemId].zoomLevel * scale;
+                        elemData[elemId].zoomLevel = updateZoom(
+                            newZoom,
+                            center.x - targetElement.getBoundingClientRect().left,
+                            center.y - targetElement.getBoundingClientRect().top
+                        );
+                        targetElement.isZoomed = true;
+                    }
+                }
+
+                // Two-finger pan
+                if (touchState.lastTouches) {
+                    const lastCenter = {
+                        x: (touchState.lastTouches[0].x + touchState.lastTouches[1].x) / 2,
+                        y: (touchState.lastTouches[0].y + touchState.lastTouches[1].y) / 2
+                    };
+                    const dx = center.x - lastCenter.x;
+                    const dy = center.y - lastCenter.y;
+                    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+                        updatePanPosition(dx, dy);
+                    }
+                }
+
+                touchState.lastDist = newDist;
+                touchState.lastTouches = [
+                    { x: t0.clientX, y: t0.clientY },
+                    { x: t1.clientX, y: t1.clientY }
+                ];
+            }
+        }, { passive: false });
+
+        targetElement.addEventListener("touchend", function(e) {
+            if (e.touches.length < 2) {
+                touchState.active = false;
+                touchState.isPanning = false;
+                touchState.lastTouches = null;
+                touchState.lastDist = 0;
+            }
+        });
     }
 
     applyZoomAndPan("#inpaint_canvas");

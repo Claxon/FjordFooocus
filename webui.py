@@ -274,13 +274,14 @@ with shared.gradio_root:
                     with gr.Tab(label='Inpaint or Outpaint', id='inpaint_tab') as inpaint_tab:
                         with gr.Row():
                             with gr.Column():
-                                inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
-                                inpaint_eraser_state = gr.State(False)
-                                with gr.Row(elem_id='inpaint_toolbar'):
-                                    inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase', elem_id='inpaint_eraser_toggle')
-                                    inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
-                                    inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
-                                    inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
+                                with gr.Row(elem_id='inpaint_canvas_row'):
+                                    with gr.Column(scale=0, min_width=50, elem_id='inpaint_toolbar'):
+                                        inpaint_eraser_state = gr.State(False)
+                                        inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase', elem_id='inpaint_eraser_toggle')
+                                        inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
+                                        inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
+                                        inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
+                                    inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
 
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method', elem_id='inpaint_mode_selector')

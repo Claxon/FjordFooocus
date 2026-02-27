@@ -150,14 +150,12 @@ function addObserverIfDesiredNodeAvailable(querySelector, callback) {
  *  - Eraser uses canvas globalCompositeOperation='destination-out' to
  *    truly remove pixels from the mask overlay
  *  - Only patches drawing canvases, NOT the interface/cursor canvas
- *    (z-index 15) so the brush preview circle stays visible
+ *    (z-index >= 15) so the brush preview circle stays visible
  */
 var inpaintRightButtonDown = false;
 
 function isInpaintEraserActive() {
-    // Right mouse button always erases
     if (inpaintRightButtonDown) return true;
-    // Toggle button fallback (for touch devices)
     var el = document.getElementById('inpaint_eraser_toggle');
     if (!el) return false;
     return el.textContent.indexOf('Draw') !== -1;
@@ -167,33 +165,24 @@ function setupRightClickEraser(container) {
     if (!container || container._rightClickPatched) return;
     container._rightClickPatched = true;
 
-    // Prevent context menu on right-click inside canvas
     container.addEventListener('contextmenu', function(e) {
         e.preventDefault();
     });
 
-    // Track right mouse button state
     container.addEventListener('mousedown', function(e) {
-        if (e.button === 2) {
-            inpaintRightButtonDown = true;
-        }
+        if (e.button === 2) inpaintRightButtonDown = true;
     }, true);
 
     container.addEventListener('mouseup', function(e) {
-        if (e.button === 2) {
-            inpaintRightButtonDown = false;
-        }
+        if (e.button === 2) inpaintRightButtonDown = false;
     }, true);
 
     container.addEventListener('mouseleave', function() {
         inpaintRightButtonDown = false;
     }, true);
 
-    // Also listen globally for mouseup in case mouse leaves canvas while held
     document.addEventListener('mouseup', function(e) {
-        if (e.button === 2) {
-            inpaintRightButtonDown = false;
-        }
+        if (e.button === 2) inpaintRightButtonDown = false;
     });
 }
 
@@ -208,8 +197,7 @@ function patchCanvasForEraser() {
         if (canvas._eraserPatched) return;
         canvas._eraserPatched = true;
 
-        // Skip the interface canvas (brush cursor preview, z-index 15)
-        // so the brush circle stays visible in erase mode
+        // Skip the interface canvas (brush cursor preview, z-index >= 15)
         var zIndex = parseInt(window.getComputedStyle(canvas).zIndex) || 0;
         if (zIndex >= 15) return;
 
@@ -232,52 +220,8 @@ function patchCanvasForEraser() {
     });
 }
 
-/**
- * Move the inpaint toolbar into the canvas and tag the Gradio
- * built-in toolbar for CSS styling as a vertical sidebar.
- */
-function setupInpaintToolbars() {
-    var canvas = document.getElementById('inpaint_canvas');
-    if (!canvas) return;
-
-    // Move our custom toolbar inside the canvas container
-    var toolbar = document.getElementById('inpaint_toolbar');
-    if (toolbar && toolbar.parentElement !== canvas) {
-        canvas.style.position = 'relative';
-        canvas.appendChild(toolbar);
-    }
-
-    // Tag the Gradio built-in icon toolbar for vertical sidebar styling
-    var iconButtons = canvas.querySelectorAll('button[aria-label]');
-    if (iconButtons.length > 0) {
-        var gradioToolbar = iconButtons[0].parentElement;
-        if (gradioToolbar && !gradioToolbar.classList.contains('inpaint-sidebar')) {
-            gradioToolbar.classList.add('inpaint-sidebar');
-        }
-    }
-
-    // Also tag the mask upload canvas toolbar
-    var maskCanvas = document.getElementById('inpaint_mask_canvas');
-    if (maskCanvas) {
-        var maskButtons = maskCanvas.querySelectorAll('button[aria-label]');
-        if (maskButtons.length > 0) {
-            var maskToolbar = maskButtons[0].parentElement;
-            if (maskToolbar && !maskToolbar.classList.contains('inpaint-sidebar')) {
-                maskToolbar.classList.add('inpaint-sidebar');
-            }
-        }
-    }
-}
-
-onUiLoaded(function() {
-    setupInpaintToolbars();
-    setTimeout(setupInpaintToolbars, 500);
-    setTimeout(setupInpaintToolbars, 2000);
-});
-
 onAfterUiUpdate(function() {
     patchCanvasForEraser();
-    setupInpaintToolbars();
 });
 
 /**
