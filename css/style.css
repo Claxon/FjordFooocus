@@ -469,6 +469,58 @@ div:has(> #positive_prompt) {
   display: none; /* remove this to enable tooltip in preview image */
 }
 
+/* Inpaint canvas: larger Gradio toolbar buttons (top-right icons) */
+#inpaint_canvas button[aria-label],
+#inpaint_mask_canvas button[aria-label] {
+  min-width: 36px !important;
+  min-height: 36px !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+#inpaint_canvas button[aria-label] svg,
+#inpaint_mask_canvas button[aria-label] svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+/* Inpaint toolbar: overlay buttons at top-left of canvas */
+#inpaint_toolbar {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 50;
+  gap: 4px !important;
+  width: auto !important;
+  flex-wrap: nowrap !important;
+  padding: 0 !important;
+  background: transparent;
+}
+/* Make the parent (column containing canvas + toolbar) position:relative */
+#inpaint_canvas {
+  position: relative;
+}
+#inpaint_toolbar > div {
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+}
+#inpaint_toolbar button {
+  min-width: auto !important;
+  padding: 6px 10px !important;
+  font-size: 14px !important;
+  font-weight: 600;
+  border-radius: 6px !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+#inpaint_toolbar button:hover {
+  background: rgba(0, 0, 0, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
 #inpaint_canvas .canvas-tooltip-info {
   top: 2px;
 }

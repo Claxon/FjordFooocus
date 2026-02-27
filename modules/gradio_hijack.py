@@ -296,9 +296,13 @@ class Image(
         if self.tool == "sketch" and self.source in ["upload", "webcam"]:
             if mask is not None:
                 mask_im = processing_utils.decode_base64_to_image(mask)
-                if mask_im.mode == "RGBA":  # whiten any opaque pixels in the mask
-                    alpha_data = mask_im.getchannel("A").convert("L")
-                    mask_im = _Image.merge("RGB", [alpha_data, alpha_data, alpha_data])
+                if mask_im.mode == "RGBA":
+                    # Composite onto black: white strokes → white (mask),
+                    # black strokes (eraser) → black (no mask),
+                    # undrawn (transparent) → black (no mask)
+                    background = _Image.new("RGB", mask_im.size, (0, 0, 0))
+                    background.paste(mask_im, mask=mask_im.split()[3])
+                    mask_im = background
                 return {
                     "image": self._format_image(im),
                     "mask": self._format_image(mask_im),

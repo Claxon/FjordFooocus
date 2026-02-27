@@ -144,6 +144,25 @@ function addObserverIfDesiredNodeAvailable(querySelector, callback) {
 }
 
 /**
+ * Move the inpaint toolbar (Erase/Clear/Paste) inside the canvas
+ * container so it can be absolutely positioned over the canvas.
+ */
+onUiLoaded(function() {
+    function moveToolbar() {
+        var canvas = document.getElementById('inpaint_canvas');
+        var toolbar = document.getElementById('inpaint_toolbar');
+        if (canvas && toolbar && toolbar.parentElement !== canvas) {
+            canvas.style.position = 'relative';
+            canvas.appendChild(toolbar);
+        }
+    }
+    moveToolbar();
+    // Retry in case elements aren't rendered yet
+    setTimeout(moveToolbar, 500);
+    setTimeout(moveToolbar, 2000);
+});
+
+/**
  * Show reset button on toast "Connection errored out."
  */
 addObserverIfDesiredNodeAvailable(".toast-wrap", function(added) {

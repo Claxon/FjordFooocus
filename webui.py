@@ -276,10 +276,10 @@ with shared.gradio_root:
                             with gr.Column():
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
                                 inpaint_eraser_state = gr.State(False)
-                                with gr.Row():
-                                    inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase Mask', elem_id='inpaint_eraser_toggle', elem_classes='type_row_half')
-                                    inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear Mask', elem_id='inpaint_clear_mask', elem_classes='type_row_half')
-                                    inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn', elem_classes='type_row_half')
+                                with gr.Row(elem_id='inpaint_toolbar'):
+                                    inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase', elem_id='inpaint_eraser_toggle')
+                                    inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
+                                    inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
                                     inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
 
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
@@ -297,7 +297,7 @@ with shared.gradio_root:
                                 def toggle_eraser(is_erasing):
                                     new_state = not is_erasing
                                     color = '#000000' if new_state else '#FFFFFF'
-                                    label = '\u270f\ufe0f Draw Mask' if new_state else '\u2b1c Erase Mask'
+                                    label = '\u270f\ufe0f Draw' if new_state else '\u2b1c Erase'
                                     return new_state, gr.update(brush_color=color), gr.update(value=label)
 
                                 inpaint_eraser_toggle.click(
