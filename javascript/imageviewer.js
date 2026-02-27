@@ -37,8 +37,13 @@ function updateOnBackgroundChange() {
     }
 }
 
+// Get all visible gallery thumbnail buttons from both grid and thumbnail views,
+// across both the progress gallery and the final gallery
 function all_gallery_buttons() {
-    var allGalleryButtons = gradioApp().querySelectorAll('.image_gallery .thumbnails > .thumbnail-item.thumbnail-small');
+    var allGalleryButtons = gradioApp().querySelectorAll(
+        '.image_gallery .thumbnails > .thumbnail-item.thumbnail-small, ' +
+        '.image_gallery .grid-container > .thumbnail-item'
+    );
     var visibleGalleryButtons = [];
     allGalleryButtons.forEach(function(elem) {
         if (elem.parentElement.offsetParent) {
@@ -89,19 +94,35 @@ function saveImage() {
 
 }
 
-function deleteCurrentImage() {
-    var modalImage = gradioApp().getElementById("modalImage");
-    if (!modalImage || !modalImage.src) return;
-
-    if (!confirm('Delete this image permanently?')) return;
-
+// Send one or more image URLs to Python for deletion (newline-separated)
+function sendDeleteRequest(urls) {
+    if (!urls || urls.length === 0) return;
     var deleteInput = document.querySelector('#delete_image_request textarea');
     if (deleteInput) {
-        deleteInput.value = modalImage.src;
+        deleteInput.value = urls.join('\n');
         var e = new Event("input", { bubbles: true });
         Object.defineProperty(e, "target", { value: deleteInput });
         deleteInput.dispatchEvent(e);
     }
+}
+
+// Remove gallery thumbnails whose image src matches any of the given URLs
+function removeFromGalleryDOM(urls) {
+    var urlSet = new Set(urls);
+    var buttons = all_gallery_buttons();
+    buttons.forEach(function(btn) {
+        var img = btn.querySelector('img');
+        if (img && urlSet.has(img.src)) {
+            btn.remove();
+        }
+    });
+}
+
+function deleteCurrentImage() {
+    var modalImage = gradioApp().getElementById("modalImage");
+    if (!modalImage || !modalImage.src) return;
+
+    var srcToDelete = modalImage.src;
 
     var galleryButtons = all_gallery_buttons();
     if (galleryButtons.length > 1) {
@@ -109,6 +130,9 @@ function deleteCurrentImage() {
     } else {
         closeModal();
     }
+
+    sendDeleteRequest([srcToDelete]);
+    removeFromGalleryDOM([srcToDelete]);
 }
 
 function modalSaveImage(event) {
@@ -143,6 +167,117 @@ function modalKeyHandler(event) {
         closeModal();
         break;
     }
+}
+
+// ===== Multi-select gallery checkboxes =====
+
+var gallerySelectedImages = new Set();
+var lastClickedCheckboxIndex = -1;
+
+function getImageSrcFromButton(button) {
+    var img = button.querySelector('img');
+    return img ? img.src : null;
+}
+
+function updateDeleteSelectedButton() {
+    var btns = document.querySelectorAll('.delete-selected-btn');
+    var count = gallerySelectedImages.size;
+    btns.forEach(function(btn) {
+        if (count > 0) {
+            btn.style.display = 'inline-flex';
+            btn.textContent = '\u{1F5D1} Delete Selected (' + count + ')';
+        } else {
+            btn.style.display = 'none';
+        }
+    });
+}
+
+function toggleGalleryCheckbox(button, checkbox) {
+    var src = getImageSrcFromButton(button);
+    if (!src) return;
+
+    if (checkbox.checked) {
+        gallerySelectedImages.add(src);
+        button.classList.add('gallery-checked');
+    } else {
+        gallerySelectedImages.delete(src);
+        button.classList.remove('gallery-checked');
+    }
+    updateDeleteSelectedButton();
+}
+
+function addCheckboxToGalleryButton(button) {
+    if (button.querySelector('.gallery-select-checkbox')) return;
+
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'gallery-select-checkbox';
+    checkbox.title = 'Select for deletion';
+
+    // Restore checked state if this image was previously selected
+    var src = getImageSrcFromButton(button);
+    if (src && gallerySelectedImages.has(src)) {
+        checkbox.checked = true;
+        button.classList.add('gallery-checked');
+    }
+
+    checkbox.addEventListener('click', function(e) {
+        e.stopPropagation();
+
+        var allButtons = all_gallery_buttons();
+        var currentIndex = allButtons.indexOf(button);
+
+        if (e.shiftKey && lastClickedCheckboxIndex !== -1 && currentIndex !== -1 && currentIndex !== lastClickedCheckboxIndex) {
+            // Shift-click: select/deselect range between last clicked and current
+            var start = Math.min(lastClickedCheckboxIndex, currentIndex);
+            var end = Math.max(lastClickedCheckboxIndex, currentIndex);
+            var shouldCheck = checkbox.checked;
+
+            for (var i = start; i <= end; i++) {
+                var btn = allButtons[i];
+                var cb = btn.querySelector('.gallery-select-checkbox');
+                if (cb && cb.checked !== shouldCheck) {
+                    cb.checked = shouldCheck;
+                    toggleGalleryCheckbox(btn, cb);
+                }
+            }
+        } else {
+            toggleGalleryCheckbox(button, checkbox);
+        }
+
+        if (currentIndex !== -1) {
+            lastClickedCheckboxIndex = currentIndex;
+        }
+    });
+    checkbox.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+    });
+    button.style.position = 'relative';
+    button.appendChild(checkbox);
+}
+
+function deleteSelectedImages() {
+    if (gallerySelectedImages.size === 0) return;
+    var urls = Array.from(gallerySelectedImages);
+    sendDeleteRequest(urls);
+    removeFromGalleryDOM(urls);
+    gallerySelectedImages.clear();
+    lastClickedCheckboxIndex = -1;
+    updateDeleteSelectedButton();
+}
+
+// Create a "Delete Selected" button for a gallery element
+function createDeleteSelectedButton() {
+    var btn = document.createElement('button');
+    btn.className = 'delete-selected-btn';
+    btn.textContent = '\u{1F5D1} Delete Selected';
+    btn.style.display = 'none';
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteSelectedImages();
+    });
+    return btn;
 }
 
 function setupImageForLightbox(e) {
@@ -201,12 +336,43 @@ function modalTileImageToggle(event) {
     event.stopPropagation();
 }
 
+// Ensure a "Delete Selected" button exists after each gallery element
+function ensureDeleteButtonForGallery(galleryElem) {
+    if (!galleryElem) return;
+    var nextSibling = galleryElem.nextElementSibling;
+    if (nextSibling && nextSibling.classList.contains('delete-selected-btn')) return;
+    var btn = createDeleteSelectedButton();
+    galleryElem.parentElement.insertBefore(btn, galleryElem.nextSibling);
+}
+
 onAfterUiUpdate(function() {
     var fullImg_preview = gradioApp().querySelectorAll('.image_gallery > div > img');
     if (fullImg_preview != null) {
         fullImg_preview.forEach(setupImageForLightbox);
     }
     updateOnBackgroundChange();
+
+    // Add checkboxes to all gallery thumbnail buttons (both progress and final galleries)
+    var galleryButtons = all_gallery_buttons();
+    galleryButtons.forEach(addCheckboxToGalleryButton);
+
+    // Clean up selections for images no longer in any gallery
+    var currentSrcs = new Set();
+    galleryButtons.forEach(function(btn) {
+        var src = getImageSrcFromButton(btn);
+        if (src) currentSrcs.add(src);
+    });
+    gallerySelectedImages.forEach(function(src) {
+        if (!currentSrcs.has(src)) {
+            gallerySelectedImages.delete(src);
+        }
+    });
+
+    // Ensure "Delete Selected" buttons exist for both galleries
+    ensureDeleteButtonForGallery(document.getElementById('final_gallery'));
+    ensureDeleteButtonForGallery(document.getElementById('progress_gallery'));
+
+    updateDeleteSelectedButton();
 });
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -227,21 +393,6 @@ document.addEventListener("DOMContentLoaded", function() {
     modalZoom.addEventListener('click', modalZoomToggle, true);
     modalZoom.title = "Toggle zoomed view";
     modalControls.appendChild(modalZoom);
-
-    // const modalTileImage = document.createElement('span');
-    // modalTileImage.className = 'modalTileImage cursor';
-    // modalTileImage.innerHTML = '&#8862;';
-    // modalTileImage.addEventListener('click', modalTileImageToggle, true);
-    // modalTileImage.title = "Preview tiling";
-    // modalControls.appendChild(modalTileImage);
-    //
-    // const modalSave = document.createElement("span");
-    // modalSave.className = "modalSave cursor";
-    // modalSave.id = "modal_save";
-    // modalSave.innerHTML = "&#x1F5AB;";
-    // modalSave.addEventListener("click", modalSaveImage, true);
-    // modalSave.title = "Save Image(s)";
-    // modalControls.appendChild(modalSave);
 
     const modalDelete = document.createElement('span');
     modalDelete.className = 'modalDelete cursor';
@@ -292,4 +443,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.body.appendChild(modal);
 
+    // Insert "Delete Selected" buttons near both galleries (retry for late renders)
+    function insertDeleteButtons() {
+        ensureDeleteButtonForGallery(document.getElementById('final_gallery'));
+        ensureDeleteButtonForGallery(document.getElementById('progress_gallery'));
+    }
+    insertDeleteButtons();
+    setTimeout(insertDeleteButtons, 1000);
+    setTimeout(insertDeleteButtons, 3000);
 });

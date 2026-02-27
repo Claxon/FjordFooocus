@@ -161,7 +161,8 @@ with shared.gradio_root:
                 progress_window = grh.Image(label='Preview', show_label=True, visible=False, height=768,
                                             elem_classes=['main_view'])
                 progress_gallery = gr.Gallery(label='Finished Images', show_label=True, object_fit='contain',
-                                              height=768, visible=False, elem_classes=['main_view', 'image_gallery'])
+                                              height=768, visible=False, elem_id='progress_gallery',
+                                              elem_classes=['main_view', 'image_gallery'])
             progress_html = gr.HTML(value=modules.html.make_progress_html(32, 'Progress 32%'), visible=False,
                                     elem_id='progress-bar', elem_classes='progress-bar')
             gallery = gr.Gallery(label='Gallery', show_label=False, object_fit='contain', visible=True, height=768,
@@ -208,13 +209,6 @@ with shared.gradio_root:
                 enhance_checkbox = gr.Checkbox(label='Enhance', value=modules.config.default_enhance_checkbox, container=False, elem_classes='min_check')
                 advanced_checkbox = gr.Checkbox(label='Advanced', value=modules.config.default_advanced_checkbox, container=False, elem_classes='min_check')
             with gr.Row(visible=modules.config.default_image_prompt_checkbox) as image_input_panel:
-                with gr.Row():
-                    mixing_image_prompt_and_vary_upscale_main = gr.Checkbox(
-                        label='Mix Image Prompt and Vary/Upscale',
-                        value=False, container=False, elem_classes='min_check')
-                    mixing_image_prompt_and_inpaint_main = gr.Checkbox(
-                        label='Mix Image Prompt and Inpaint',
-                        value=False, container=False, elem_classes='min_check')
                 with gr.Tabs(selected=modules.config.default_selected_image_input_tab_id):
                     with gr.Tab(label='Upscale or Variation', id='uov_tab') as uov_tab:
                         with gr.Row():
@@ -258,6 +252,13 @@ with shared.gradio_root:
                                         ip_type.change(lambda x: flags.default_parameters[x], inputs=[ip_type], outputs=[ip_stop, ip_weight], queue=False, show_progress=False)
                                     ip_ad_cols.append(ad_col)
                         ip_advanced = gr.Checkbox(label='Advanced', value=modules.config.default_image_prompt_advanced_checkbox, container=False)
+                        with gr.Row():
+                            mixing_image_prompt_and_vary_upscale_main = gr.Checkbox(
+                                label='Mix with Vary/Upscale',
+                                value=False, container=False, elem_classes='min_check')
+                            mixing_image_prompt_and_inpaint_main = gr.Checkbox(
+                                label='Mix with Inpaint',
+                                value=False, container=False, elem_classes='min_check')
                         gr.HTML('* \"Image Prompt\" is powered by Fooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Documentation</a>')
 
                         def ip_advance_checked(x):
@@ -944,32 +945,49 @@ with shared.gradio_root:
 
         state_is_generating = gr.State(False)
 
-        def handle_delete_image(file_path_request, current_gallery):
+        def handle_delete_image(file_path_request):
             import re
+            from urllib.parse import unquote
             if not file_path_request or file_path_request.strip() == '':
-                return gr.update(), gr.update()
-            match = re.search(r'/file=(.+?)(?:\?|$)', file_path_request)
-            target_path = match.group(1) if match else file_path_request.strip()
-            target_path = os.path.abspath(target_path)
+                return gr.update(value='')
+
             outputs_path = os.path.abspath(modules.config.path_outputs)
-            if not target_path.startswith(outputs_path):
-                print(f'Delete rejected: {target_path} is not in outputs directory')
-                return gr.update(), gr.update()
-            if os.path.exists(target_path):
-                os.remove(target_path)
-                print(f'Deleted: {target_path}')
-            else:
-                print(f'File not found for deletion: {target_path}')
-            if current_gallery:
-                updated = [img for img in current_gallery
-                           if not (isinstance(img, str) and os.path.abspath(img) == target_path)]
-                return gr.update(value=updated), gr.update(value='')
-            return gr.update(), gr.update(value='')
+
+            for line in file_path_request.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                # Extract path from /file=<path> or /file/<path> URL formats
+                match = re.search(r'/file[=/](.+?)(?:\?|$)', line)
+                extracted = unquote(match.group(1)) if match else line
+                extracted = os.path.abspath(extracted)
+
+                # If the path is in outputs dir, delete directly
+                if extracted.startswith(outputs_path) and os.path.exists(extracted):
+                    os.remove(extracted)
+                    print(f'Deleted: {extracted}')
+                    continue
+
+                # Otherwise the URL points to Gradio's temp cache — find the
+                # matching output file by filename
+                filename = os.path.basename(extracted)
+                found = False
+                for root, dirs, files in os.walk(outputs_path):
+                    if filename in files:
+                        real_path = os.path.join(root, filename)
+                        os.remove(real_path)
+                        print(f'Deleted: {real_path}')
+                        found = True
+                        break
+                if not found:
+                    print(f'File not found for deletion: {filename}')
+
+            return gr.update(value='')
 
         delete_image_request.input(
             handle_delete_image,
-            inputs=[delete_image_request, gallery],
-            outputs=[gallery, delete_image_request],
+            inputs=[delete_image_request],
+            outputs=[delete_image_request],
             queue=False, show_progress=False)
 
         def format_queue_html(q):
