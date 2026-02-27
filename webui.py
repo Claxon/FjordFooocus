@@ -31,7 +31,7 @@ def get_task(*args):
 
     return worker.AsyncTask(args=args)
 
-def generate_clicked(task: worker.AsyncTask):
+def generate_clicked(task: worker.AsyncTask, session_imgs=None):
     import ldm_patched.modules.model_management as model_management
 
     with model_management.interrupt_processing_mutex:
@@ -77,10 +77,14 @@ def generate_clicked(task: worker.AsyncTask):
                 if not args_manager.args.disable_enhance_output_sorting:
                     product = sort_enhance_images(product, task)
 
+                # Prepend new results before previous session images for accumulated gallery
+                previous = session_imgs if isinstance(session_imgs, list) else []
+                accumulated = product + previous
+
                 yield gr.update(visible=False), \
                     gr.update(visible=False), \
                     gr.update(visible=False), \
-                    gr.update(visible=True, value=product)
+                    gr.update(visible=True, value=accumulated)
                 finished = True
 
                 # delete Fooocus temp images, only keep gradio temp images
@@ -1257,19 +1261,19 @@ with shared.gradio_root:
         def accumulate_results(session_imgs, session_batches, task, current_prompt):
             new_images = list(task.results) if hasattr(task, 'results') and task.results else []
             if not new_images:
-                return session_imgs, session_batches, gr.update()
+                return session_imgs, session_batches
             accumulated = new_images + session_imgs
             prompt_preview = ' '.join((current_prompt or '').split()[:3])
             batch_time = datetime.datetime.now().strftime('%I:%M %p').lstrip('0')
             new_batches = session_batches + [{'count': len(new_images), 'prompt': current_prompt or '', 'preview': prompt_preview, 'time': batch_time}]
-            return accumulated, new_batches, gr.update(visible=True, value=accumulated)
+            return accumulated, new_batches
 
         generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False), True),
                               outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
             .then(fn=get_task, inputs=ctrls, outputs=currentTask) \
-            .then(fn=generate_clicked, inputs=currentTask, outputs=[progress_html, progress_window, progress_gallery, gallery]) \
-            .then(fn=accumulate_results, inputs=[session_gallery_state, session_batch_state, currentTask, prompt], outputs=[session_gallery_state, session_batch_state, gallery]) \
+            .then(fn=generate_clicked, inputs=[currentTask, session_gallery_state], outputs=[progress_html, progress_window, progress_gallery, gallery]) \
+            .then(fn=accumulate_results, inputs=[session_gallery_state, session_batch_state, currentTask, prompt], outputs=[session_gallery_state, session_batch_state]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
             .then(fn=update_history_link, outputs=history_link) \
