@@ -274,14 +274,20 @@ with shared.gradio_root:
                     with gr.Tab(label='Inpaint or Outpaint', id='inpaint_tab') as inpaint_tab:
                         with gr.Row():
                             with gr.Column():
-                                with gr.Row(elem_id='inpaint_canvas_row'):
-                                    with gr.Column(scale=0, min_width=50, elem_id='inpaint_toolbar'):
-                                        inpaint_eraser_state = gr.State(False)
-                                        inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase', elem_id='inpaint_eraser_toggle')
-                                        inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
-                                        inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
-                                        inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
-                                    inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
+                                with gr.Row(elem_id='inpaint_toolbar'):
+                                    inpaint_eraser_state = gr.State(False)
+                                    inpaint_eraser_toggle = gr.Button(value='\u2b1c Erase', elem_id='inpaint_eraser_toggle')
+                                    inpaint_undo_btn = gr.Button(value='\u21a9 Undo', elem_id='inpaint_undo_btn')
+                                    inpaint_undo_btn.click(fn=lambda: None, _js='() => { const el = document.querySelector("#inpaint_canvas"); if(el) { const btn = el.querySelector("button[aria-label=\\"Undo\\"]"); if(btn) btn.click(); } }', queue=False, show_progress=False)
+                                    inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
+                                    inpaint_save_btn = gr.Button(value='\U0001f4be Save', elem_id='inpaint_save_btn')
+                                    inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
+                                    inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
+                                    inpaint_brush_down = gr.Button(value='\U0001f58c\ufe0f\u2212', elem_id='inpaint_brush_down')
+                                    inpaint_brush_down.click(fn=lambda: None, _js='() => { var input = document.querySelector("#inpaint_canvas input[aria-label=\'Brush radius\']"); if(input) { var max = parseFloat(input.getAttribute("max")) || 100; input.value = Math.max(parseFloat(input.value) - max * 0.05, 0); input.dispatchEvent(new Event("change")); } }', queue=False, show_progress=False)
+                                    inpaint_brush_up = gr.Button(value='\U0001f58c\ufe0f+', elem_id='inpaint_brush_up')
+                                    inpaint_brush_up.click(fn=lambda: None, _js='() => { var input = document.querySelector("#inpaint_canvas input[aria-label=\'Brush radius\']"); if(input) { var max = parseFloat(input.getAttribute("max")) || 100; input.value = Math.min(parseFloat(input.value) + max * 0.05, max); input.dispatchEvent(new Event("change")); } }', queue=False, show_progress=False)
+                                inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
 
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method', elem_id='inpaint_mode_selector')
@@ -310,6 +316,32 @@ with shared.gradio_root:
                                 inpaint_clear_mask.click(
                                     fn=lambda: None,
                                     _js='() => { const el = document.querySelector("#inpaint_canvas"); if(el) { const undoBtn = el.querySelector("button[aria-label=\\"Undo\\"]"); if(undoBtn) { for(let i=0;i<50;i++) undoBtn.click(); } } }',
+                                    queue=False, show_progress=False)
+
+                                def save_inpaint_image_and_mask(inpaint_data):
+                                    from PIL import Image
+                                    from modules.util import generate_temp_filename
+                                    if inpaint_data is None or not isinstance(inpaint_data, dict):
+                                        print('[Save] No inpaint data to save.')
+                                        return inpaint_data
+                                    image_array = inpaint_data.get('image')
+                                    mask_array = inpaint_data.get('mask')
+                                    output_folder = modules.config.path_outputs
+                                    if image_array is not None:
+                                        _, image_path, _ = generate_temp_filename(folder=output_folder, extension='png')
+                                        os.makedirs(os.path.dirname(image_path), exist_ok=True)
+                                        Image.fromarray(image_array).save(image_path)
+                                        print(f'[Save] Image saved to {image_path}')
+                                    if mask_array is not None:
+                                        _, mask_path, _ = generate_temp_filename(folder=output_folder, extension='png')
+                                        os.makedirs(os.path.dirname(mask_path), exist_ok=True)
+                                        Image.fromarray(mask_array).save(mask_path)
+                                        print(f'[Save] Mask saved to {mask_path}')
+                                    return inpaint_data
+
+                                inpaint_save_btn.click(
+                                    save_inpaint_image_and_mask, inputs=inpaint_input_image,
+                                    outputs=inpaint_input_image,
                                     queue=False, show_progress=False)
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:

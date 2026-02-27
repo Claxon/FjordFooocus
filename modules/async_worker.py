@@ -448,6 +448,10 @@ def worker():
     def apply_vary(async_task, uov_method, denoising_strength, uov_input_image, switch, current_progress, advance_progress=False):
         if 'subtle' in uov_method:
             denoising_strength = 0.5
+        if 'moderate' in uov_method:
+            denoising_strength = 0.625
+        if 'bold' in uov_method:
+            denoising_strength = 0.75
         if 'strong' in uov_method:
             denoising_strength = 0.85
         if async_task.overwrite_vary_strength > 0:

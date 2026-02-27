@@ -469,19 +469,14 @@ div:has(> #positive_prompt) {
   display: none; /* remove this to enable tooltip in preview image */
 }
 
-/* ---- Inpaint toolbar (side column with Erase/Clear/Paste) ---- */
-#inpaint_canvas_row {
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-}
+/* ---- Inpaint toolbar (horizontal row above canvas) ---- */
 #inpaint_toolbar {
-  max-width: 60px !important;
-  min-width: 50px !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
   gap: 4px !important;
   padding: 4px !important;
-  flex-wrap: nowrap !important;
-  flex-direction: column !important;
   justify-content: flex-start !important;
+  align-items: center !important;
 }
 #inpaint_toolbar > div {
   min-width: 0 !important;
@@ -489,8 +484,8 @@ div:has(> #positive_prompt) {
 }
 #inpaint_toolbar button {
   min-width: auto !important;
-  padding: 6px 4px !important;
-  font-size: 11px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
   font-weight: 600;
   border-radius: 6px !important;
   white-space: nowrap;
@@ -519,14 +514,12 @@ div:has(> #positive_prompt) {
 /* ---- Mobile / touchscreen: larger buttons and controls ---- */
 @media (max-width: 768px) {
   #inpaint_toolbar {
-    max-width: 80px !important;
-    min-width: 70px !important;
-    gap: 6px !important;
-    padding: 6px !important;
+    gap: 4px !important;
+    padding: 4px !important;
   }
   #inpaint_toolbar button {
-    padding: 10px 8px !important;
-    font-size: 14px !important;
+    padding: 8px 10px !important;
+    font-size: 13px !important;
   }
   /* Larger Gradio built-in canvas toolbar buttons on mobile */
   #inpaint_canvas button[aria-label],

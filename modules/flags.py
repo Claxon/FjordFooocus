@@ -3,12 +3,14 @@ from enum import IntEnum, Enum
 disabled = 'Disabled'
 enabled = 'Enabled'
 subtle_variation = 'Vary (Subtle)'
+moderate_variation = 'Vary (Moderate)'
+bold_variation = 'Vary (Bold)'
 strong_variation = 'Vary (Strong)'
 upscale_15 = 'Upscale (1.5x)'
 upscale_2 = 'Upscale (2x)'
 upscale_fast = 'Upscale (Fast 2x)'
 
-uov_list = [disabled, subtle_variation, strong_variation, upscale_15, upscale_2, upscale_fast]
+uov_list = [disabled, subtle_variation, moderate_variation, bold_variation, strong_variation, upscale_15, upscale_2, upscale_fast]
 
 enhancement_uov_before = "Before First Enhancement"
 enhancement_uov_after = "After Last Enhancement"
