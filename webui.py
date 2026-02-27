@@ -166,7 +166,7 @@ with shared.gradio_root:
         with gr.Column(scale=2):
             with gr.Row():
                 progress_window = grh.Image(label='Preview', show_label=True, visible=False, height=768,
-                                            elem_classes=['main_view'])
+                                            elem_id='preview_image', elem_classes=['main_view'])
                 progress_gallery = gr.Gallery(label='Finished Images', show_label=True, object_fit='contain',
                                               height=768, visible=False, elem_id='progress_gallery',
                                               elem_classes=['main_view', 'image_gallery'])
@@ -249,8 +249,11 @@ with shared.gradio_root:
                                 image_count += 1
                                 with gr.Column():
                                     ip_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, height=300, value=modules.config.default_ip_images[image_count], elem_id=f'ip_image_{image_count}')
-                                    ip_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_classes='type_row_half')
+                                    with gr.Row():
+                                        ip_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_classes='type_row_half')
+                                        ip_camera_btn = gr.Button(value='\U0001f4f7 Cam', elem_classes='type_row_half')
                                     ip_paste_btn.click(fn=lambda: None, _js=f'() => {{ pasteImageFromClipboard("#ip_image_{image_count}"); }}', queue=False, show_progress=False)
+                                    ip_camera_btn.click(fn=lambda: None, _js=f'() => {{ toggleCamera("#ip_image_{image_count}"); }}', queue=False, show_progress=False)
                                     ip_images.append(ip_image)
                                     ip_ctrls.append(ip_image)
                                     with gr.Column(visible=modules.config.default_image_prompt_advanced_checkbox) as ad_col:
@@ -304,6 +307,8 @@ with shared.gradio_root:
                                     inpaint_save_mask_btn.click(fn=lambda: None, _js='() => { saveInpaintCanvas("mask"); }', queue=False, show_progress=False)
                                     inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
                                     inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
+                                    inpaint_camera_btn = gr.Button(value='\U0001f4f7 Cam', elem_id='inpaint_camera_btn')
+                                    inpaint_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#inpaint_canvas"); }', queue=False, show_progress=False)
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
 
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)

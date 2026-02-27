@@ -1,7 +1,7 @@
 // Camera Fullscreen Preview: shows generated images fullscreen during live camera mode
 // Creates a seamless loop: completed image → live preview → completed image
-// Uses setInterval polling (not onAfterUiUpdate) because Gradio updates img.src
-// attributes directly without DOM childList mutations.
+// Uses setInterval polling because Gradio updates img.src attributes directly
+// without DOM childList mutations, so MutationObserver misses them.
 (function() {
     'use strict';
 
@@ -51,7 +51,7 @@
 
     function startPolling() {
         if (pollTimer) return;
-        pollTimer = setInterval(pollForImages, 200);
+        pollTimer = setInterval(pollForImages, 150);
     }
 
     function stopPolling() {
@@ -61,12 +61,23 @@
         }
     }
 
-    // progress_window is the .main_view that is NOT .image_gallery (not a gallery component)
+    // Find the preview image from #preview_image (progress_window component)
+    // Gradio hides components with display:none on their wrapper — we walk up
+    // to check visibility since the elem_id is on the component root but Gradio
+    // may wrap it in an extra container for visibility control.
     function getProgressWindowImage() {
-        var pw = document.querySelector('.main_view:not(.image_gallery)');
+        var pw = document.getElementById('preview_image');
         if (!pw) return null;
-        // Check visibility: Gradio hides with display:none on wrapper
-        if (pw.offsetParent === null) return null;
+
+        // Walk up to check no ancestor is hidden
+        var el = pw;
+        while (el && el !== document.body) {
+            var style = el.style;
+            if (style && style.display === 'none') return null;
+            el = el.parentElement;
+        }
+
+        // Find any img inside — Gradio Image components render an <img> when a value is set
         var img = pw.querySelector('img');
         return (img && img.src) ? img : null;
     }
@@ -75,7 +86,15 @@
     function getLatestGalleryImage() {
         var gallery = document.getElementById('final_gallery');
         if (!gallery) return null;
-        if (gallery.offsetParent === null) return null;
+
+        // Check visibility
+        var el = gallery;
+        while (el && el !== document.body) {
+            var style = el.style;
+            if (style && style.display === 'none') return null;
+            el = el.parentElement;
+        }
+
         var img = gallery.querySelector('.grid-container > .thumbnail-item:first-child img');
         if (!img) {
             img = gallery.querySelector('.thumbnails > .thumbnail-item:first-child img');
@@ -83,7 +102,7 @@
         return (img && img.src) ? img : null;
     }
 
-    // Core polling function — runs every 200ms while camera is active
+    // Core polling function — runs every 150ms while camera is active
     function pollForImages() {
         var cameraActive = window.cameraCapture
             && window.cameraCapture.getState() !== 'IDLE';
