@@ -15,14 +15,14 @@ log_cache = {}
 
 def get_current_html_path(output_format=None):
     output_format = output_format if output_format else modules.config.default_output_format
-    date_string, local_temp_filename, only_name = generate_temp_filename(folder=modules.config.path_outputs,
+    date_string, local_temp_filename, only_name = generate_temp_filename(folder=modules.config.get_effective_output_path(),
                                                                          extension=output_format)
     html_name = os.path.join(os.path.dirname(local_temp_filename), 'log.html')
     return html_name
 
 
 def log(img, metadata, metadata_parser: MetadataParser | None = None, output_format=None, task=None, persist_image=True) -> str:
-    path_outputs = modules.config.temp_path if args_manager.args.disable_image_log or not persist_image else modules.config.path_outputs
+    path_outputs = modules.config.temp_path if args_manager.args.disable_image_log or not persist_image else modules.config.get_effective_output_path()
     output_format = output_format if output_format else modules.config.default_output_format
     date_string, local_temp_filename, only_name = generate_temp_filename(folder=path_outputs, extension=output_format)
     os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)

@@ -3,6 +3,7 @@ import random
 import os
 import json
 import time
+import datetime
 import shared
 import modules.config
 import fooocus_version
@@ -155,6 +156,8 @@ shared.gradio_root = gr.Blocks(title=title).queue()
 with shared.gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
     inpaint_engine_state = gr.State('empty')
+    session_gallery_state = gr.State([])
+    session_batch_state = gr.State([])
     with gr.Row():
         with gr.Column(scale=2):
             with gr.Row():
@@ -169,6 +172,15 @@ with shared.gradio_root:
                                  elem_classes=['resizable_area', 'main_view', 'final_gallery', 'image_gallery'],
                                  elem_id='final_gallery')
             delete_image_request = gr.Textbox(elem_id='delete_image_request', visible=False)
+            profile_receiver = gr.Textbox(elem_id='profile_receiver', visible=False)
+            topic_receiver = gr.Textbox(elem_id='topic_receiver', visible=False)
+            approve_images_request = gr.Textbox(elem_id='approve_images_request', visible=False)
+            session_batch_info = gr.HTML(elem_id='session_batch_info', visible=False, value='[]')
+            with gr.Row(elem_id='session_batch_nav_row'):
+                gr.HTML(elem_id='session_batch_nav', value='<div id="session_batch_nav"></div>')
+            gr.HTML(elem_id='batch_prompt_display_wrap', value='<div id="batch_prompt_display"></div>')
+            with gr.Row(elem_id='profile_topic_bar'):
+                gr.HTML(elem_id='profile_topic_ui', value='<div id="profile_topic_ui"></div>')
             with gr.Row():
                 with gr.Column(scale=17):
                     prompt = gr.Textbox(show_label=False, placeholder="Type prompt here or paste parameters.", elem_id='positive_prompt',
@@ -1002,6 +1014,63 @@ with shared.gradio_root:
             outputs=[delete_image_request],
             queue=False, show_progress=False)
 
+        def handle_profile_change(profile_name):
+            modules.config.active_profile = profile_name.strip() if profile_name else 'default'
+            print(f'Profile set to: {modules.config.active_profile}')
+            return gr.update(value='')
+
+        def handle_topic_change(topic_name):
+            modules.config.active_topic = topic_name.strip() if topic_name else ''
+            print(f'Topic set to: {modules.config.active_topic or "(none)"}')
+            return gr.update(value='')
+
+        def handle_approve_images(paths_text):
+            import re
+            import shutil
+            from urllib.parse import unquote
+            if not paths_text or paths_text.strip() == '':
+                return gr.update(value='')
+
+            outputs_path = os.path.abspath(modules.config.path_outputs)
+            count = 0
+            for line in paths_text.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                match = re.search(r'/file[=/](.+?)(?:\?|$)', line)
+                extracted = unquote(match.group(1)) if match else line
+                extracted = os.path.abspath(extracted)
+
+                real_path = None
+                if extracted.startswith(outputs_path) and os.path.exists(extracted):
+                    real_path = extracted
+                else:
+                    filename = os.path.basename(extracted)
+                    temp_base = os.path.join(outputs_path, 'TEMPORARY')
+                    for root, dirs, files in os.walk(temp_base):
+                        if filename in files:
+                            real_path = os.path.join(root, filename)
+                            break
+
+                if real_path:
+                    approved_path = modules.config.get_approved_output_path(real_path)
+                    if approved_path:
+                        os.makedirs(os.path.dirname(approved_path), exist_ok=True)
+                        shutil.copy2(real_path, approved_path)
+                        print(f'Approved: {real_path} -> {approved_path}')
+                        count += 1
+                    else:
+                        print(f'Cannot compute approved path for: {real_path}')
+                else:
+                    print(f'File not found for approval: {line}')
+
+            print(f'Approved {count} image(s)')
+            return gr.update(value='')
+
+        profile_receiver.input(handle_profile_change, inputs=[profile_receiver], outputs=[profile_receiver], queue=False, show_progress=False)
+        topic_receiver.input(handle_topic_change, inputs=[topic_receiver], outputs=[topic_receiver], queue=False, show_progress=False)
+        approve_images_request.input(handle_approve_images, inputs=[approve_images_request], outputs=[approve_images_request], queue=False, show_progress=False)
+
         def format_queue_html(q):
             if not q:
                 return gr.update(visible=False, value='')
@@ -1181,11 +1250,25 @@ with shared.gradio_root:
         metadata_import_button.click(trigger_metadata_import, inputs=[metadata_input_image, state_is_generating], outputs=load_data_outputs, queue=False, show_progress=True) \
             .then(style_sorter.sort_styles, inputs=style_selections, outputs=style_selections, queue=False, show_progress=False)
 
-        generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), [], True),
+        def accumulate_results(session_imgs, session_batches, new_gallery, current_prompt):
+            if new_gallery is None:
+                new_gallery = []
+            new_count = len(new_gallery)
+            if new_count > 0:
+                accumulated = list(new_gallery) + list(session_imgs)
+                prompt_preview = ' '.join((current_prompt or '').split()[:3])
+                batch_time = datetime.datetime.now().strftime('%I:%M %p').lstrip('0')
+                new_batches = session_batches + [{'count': new_count, 'prompt': current_prompt or '', 'preview': prompt_preview, 'time': batch_time}]
+                batch_json = json.dumps(new_batches)
+                return accumulated, new_batches, gr.update(visible=True, value=accumulated), gr.update(value=batch_json)
+            return session_imgs, session_batches, gr.update(), gr.update()
+
+        generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False), True),
                               outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
             .then(fn=get_task, inputs=ctrls, outputs=currentTask) \
             .then(fn=generate_clicked, inputs=currentTask, outputs=[progress_html, progress_window, progress_gallery, gallery]) \
+            .then(fn=accumulate_results, inputs=[session_gallery_state, session_batch_state, gallery, prompt], outputs=[session_gallery_state, session_batch_state, gallery, session_batch_info]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
             .then(fn=update_history_link, outputs=history_link) \
@@ -1198,10 +1281,11 @@ with shared.gradio_root:
 
         reset_button.click(lambda: [worker.AsyncTask(args=[]), False, gr.update(visible=True, interactive=True)] +
                                    [gr.update(visible=False)] * 6 +
-                                   [gr.update(visible=True, value=[])],
+                                   [gr.update(visible=True, value=[]), [], [], gr.update(value='[]')],
                            outputs=[currentTask, state_is_generating, generate_button,
                                     reset_button, stop_button, skip_button,
-                                    progress_html, progress_window, progress_gallery, gallery],
+                                    progress_html, progress_window, progress_gallery, gallery,
+                                    session_gallery_state, session_batch_state, session_batch_info],
                            queue=False)
 
         for notification_file in ['notification.ogg', 'notification.mp3']:

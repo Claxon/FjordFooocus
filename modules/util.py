@@ -165,6 +165,15 @@ def join_prompts(*args, **kwargs):
     return ', '.join(prompts)
 
 
+def sanitize_name(name):
+    import re
+    if not name or not name.strip():
+        return 'default'
+    slug = re.sub(r'[^\w\-]', '_', name.strip().lower())
+    slug = re.sub(r'_+', '_', slug).strip('_')
+    return slug[:64] or 'default'
+
+
 def generate_temp_filename(folder='./outputs/', extension='png'):
     current_time = datetime.datetime.now()
     date_string = current_time.strftime("%Y-%m-%d")

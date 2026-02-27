@@ -203,6 +203,35 @@ path_safety_checker = get_dir_or_set_default('path_safety_checker', '../models/s
 path_sam = get_dir_or_set_default('path_sam', '../models/sam/')
 path_outputs = get_path_output()
 
+# Dynamic per-session output routing (set by JS->Python bridge)
+active_profile = 'default'
+active_topic = ''
+
+
+def get_effective_output_path():
+    from modules.util import sanitize_name
+    profile_slug = sanitize_name(active_profile)
+    if active_topic and active_topic.strip():
+        topic_slug = sanitize_name(active_topic)
+        return os.path.join(path_outputs, 'TEMPORARY', profile_slug, topic_slug)
+    else:
+        return os.path.join(path_outputs, 'TEMPORARY', profile_slug, 'other')
+
+
+def get_approved_output_path(source_path):
+    source_abs = os.path.abspath(source_path)
+    temp_base = os.path.abspath(os.path.join(path_outputs, 'TEMPORARY'))
+    if not source_abs.startswith(temp_base):
+        return None
+    rel = os.path.relpath(source_abs, temp_base)
+    parts = rel.replace('\\', '/').split('/')
+    # parts: [profile, topic, date_dir, filename] — strip date_dir
+    if len(parts) >= 4:
+        approved_parts = parts[:2] + parts[3:]  # skip date_dir
+    else:
+        approved_parts = parts
+    return os.path.join(path_outputs, 'APPROVED', *approved_parts)
+
 
 def get_config_item_or_set_default(key, default_value, validator, disable_empty_as_none=False, expected_type=None):
     global config_dict, visited_keys
