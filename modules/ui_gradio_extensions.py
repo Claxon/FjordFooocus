@@ -47,6 +47,8 @@ def javascript_html():
     head += f'<script type="text/javascript" src="{session_gallery_js_path}"></script>\n'
     camera_capture_js_path = webpath('javascript/camera_capture.js')
     head += f'<script type="text/javascript" src="{camera_capture_js_path}"></script>\n'
+    camera_fullscreen_js_path = webpath('javascript/camera_fullscreen.js')
+    head += f'<script type="text/javascript" src="{camera_fullscreen_js_path}"></script>\n'
     head += f'<meta name="samples-path" content="{samples_path}">\n'
 
     if args_manager.args.theme:
