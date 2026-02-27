@@ -266,6 +266,65 @@ onAfterUiUpdate(function() {
 });
 
 /**
+ * Save inpaint canvas source image or mask as a browser download.
+ * The browser's "Save As" dialog appears if the user has enabled
+ * "Ask where to save each file before downloading" in their browser settings.
+ *
+ * Gradio sketch canvas layers:
+ *   drawing (z=11)   — source image (background)
+ *   mask    (z=13)   — mask strokes (white on transparent)
+ *
+ * @param {string} which - "source" or "mask"
+ */
+function saveInpaintCanvas(which) {
+    var container = document.querySelector('#inpaint_canvas');
+    if (!container) return;
+
+    var targetZ = (which === 'mask') ? 13 : 11;
+    var canvases = container.querySelectorAll('canvas');
+    var targetCanvas = null;
+
+    canvases.forEach(function(c) {
+        var z = parseInt(window.getComputedStyle(c).zIndex) || 0;
+        if (z === targetZ) targetCanvas = c;
+    });
+
+    if (!targetCanvas) {
+        console.log('[Save] Canvas not found for z-index ' + targetZ);
+        return;
+    }
+
+    // For mask: convert to opaque (white strokes on black background)
+    // so the saved PNG is clearly visible
+    var dataURL;
+    if (which === 'mask') {
+        var w = targetCanvas.width, h = targetCanvas.height;
+        var tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = w;
+        tmpCanvas.height = h;
+        var tmpCtx = tmpCanvas.getContext('2d');
+        // Black background
+        tmpCtx.fillStyle = '#000000';
+        tmpCtx.fillRect(0, 0, w, h);
+        // Draw the mask (white strokes) on top
+        tmpCtx.drawImage(targetCanvas, 0, 0);
+        dataURL = tmpCanvas.toDataURL('image/png');
+    } else {
+        dataURL = targetCanvas.toDataURL('image/png');
+    }
+
+    var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    var filename = 'inpaint_' + which + '_' + timestamp + '.png';
+
+    var a = document.createElement('a');
+    a.href = dataURL;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+/**
  * Show reset button on toast "Connection errored out."
  */
 addObserverIfDesiredNodeAvailable(".toast-wrap", function(added) {

@@ -281,7 +281,9 @@ with shared.gradio_root:
                                     inpaint_undo_btn.click(fn=lambda: None, _js='() => { const el = document.querySelector("#inpaint_canvas"); if(el) { const btn = el.querySelector("button[aria-label=\\"Undo\\"]"); if(btn) btn.click(); } }', queue=False, show_progress=False)
                                     inpaint_clear_mask = gr.Button(value='\U0001f5d1 Clear', elem_id='inpaint_clear_mask')
                                     inpaint_save_source_btn = gr.Button(value='\U0001f4be Source', elem_id='inpaint_save_source_btn')
+                                    inpaint_save_source_btn.click(fn=lambda: None, _js='() => { saveInpaintCanvas("source"); }', queue=False, show_progress=False)
                                     inpaint_save_mask_btn = gr.Button(value='\U0001f4be Mask', elem_id='inpaint_save_mask_btn')
+                                    inpaint_save_mask_btn.click(fn=lambda: None, _js='() => { saveInpaintCanvas("mask"); }', queue=False, show_progress=False)
                                     inpaint_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_id='inpaint_paste_btn')
                                     inpaint_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_canvas"); }', queue=False, show_progress=False)
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
@@ -315,45 +317,6 @@ with shared.gradio_root:
                                     _js='() => { const el = document.querySelector("#inpaint_canvas"); if(el) { const undoBtn = el.querySelector("button[aria-label=\\"Undo\\"]"); if(undoBtn) { for(let i=0;i<50;i++) undoBtn.click(); } } }',
                                     queue=False, show_progress=False)
 
-                                def save_inpaint_source(inpaint_data):
-                                    from PIL import Image
-                                    from modules.util import generate_temp_filename
-                                    if inpaint_data is None or not isinstance(inpaint_data, dict):
-                                        print('[Save] No inpaint data to save.')
-                                        return inpaint_data
-                                    image_array = inpaint_data.get('image')
-                                    if image_array is not None:
-                                        output_folder = modules.config.path_outputs
-                                        _, image_path, _ = generate_temp_filename(folder=output_folder, extension='png')
-                                        os.makedirs(os.path.dirname(image_path), exist_ok=True)
-                                        Image.fromarray(image_array).save(image_path)
-                                        print(f'[Save] Source image saved to {image_path}')
-                                    return inpaint_data
-
-                                def save_inpaint_mask(inpaint_data):
-                                    from PIL import Image
-                                    from modules.util import generate_temp_filename
-                                    if inpaint_data is None or not isinstance(inpaint_data, dict):
-                                        print('[Save] No inpaint data to save.')
-                                        return inpaint_data
-                                    mask_array = inpaint_data.get('mask')
-                                    if mask_array is not None:
-                                        output_folder = modules.config.path_outputs
-                                        _, mask_path, _ = generate_temp_filename(folder=output_folder, extension='png')
-                                        os.makedirs(os.path.dirname(mask_path), exist_ok=True)
-                                        Image.fromarray(mask_array).save(mask_path)
-                                        print(f'[Save] Mask saved to {mask_path}')
-                                    return inpaint_data
-
-                                inpaint_save_source_btn.click(
-                                    save_inpaint_source, inputs=inpaint_input_image,
-                                    outputs=inpaint_input_image,
-                                    queue=False, show_progress=False)
-
-                                inpaint_save_mask_btn.click(
-                                    save_inpaint_mask, inputs=inpaint_input_image,
-                                    outputs=inpaint_input_image,
-                                    queue=False, show_progress=False)
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
                                 inpaint_mask_image = grh.Image(label='Mask Upload', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", mask_opacity=1, elem_id='inpaint_mask_canvas')
