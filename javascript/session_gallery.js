@@ -1,33 +1,27 @@
 // Session Gallery: batch navigation, filtering, and Save Starred
+// Tracks batches by observing gallery DOM changes (pure JS, no Python dependency)
 (function() {
     'use strict';
 
+    var sessionBatches = [];  // [{count, prompt, time}, ...]
+    var previousGalleryCount = 0;
     var activeBatchIndex = -1; // -1 means ALL
-
-    function getBatchData() {
-        var el = document.querySelector('#session_batch_info');
-        if (!el) return [];
-        // The data is in a nested element — Gradio wraps HTML content
-        var text = el.textContent || el.innerText || '';
-        text = text.trim();
-        if (!text || text === '[]') return [];
-        try {
-            return JSON.parse(text);
-        } catch(e) { return []; }
-    }
 
     function getGalleryButtons() {
         return Array.from(document.querySelectorAll('#final_gallery .grid-container > .thumbnail-item'));
     }
 
+    function getCurrentPrompt() {
+        var el = document.querySelector('#positive_prompt textarea');
+        return el ? el.value : '';
+    }
+
     function buildBatchNav() {
         var nav = document.getElementById('session_batch_nav');
         if (!nav) return;
-
-        var batches = getBatchData();
         nav.innerHTML = '';
 
-        if (batches.length === 0) return;
+        if (sessionBatches.length === 0) return;
 
         // ALL button
         var allBtn = document.createElement('button');
@@ -40,13 +34,14 @@
         });
         nav.appendChild(allBtn);
 
-        // Per-batch buttons (newest batch = last in array, but images are prepended = first in DOM)
-        for (var i = batches.length - 1; i >= 0; i--) {
+        // Per-batch buttons (newest first in display)
+        for (var i = sessionBatches.length - 1; i >= 0; i--) {
             (function(idx) {
-                var batch = batches[idx];
+                var batch = sessionBatches[idx];
                 var btn = document.createElement('button');
                 btn.className = 'batch-nav-btn' + (activeBatchIndex === idx ? ' active' : '');
-                btn.textContent = batch.time + ' \u2014 ' + (batch.preview || '...');
+                var preview = batch.prompt ? batch.prompt.split(/\s+/).slice(0, 3).join(' ') : '...';
+                btn.textContent = batch.time + ' \u2014 ' + preview;
                 btn.title = batch.prompt || '';
                 btn.addEventListener('click', function() {
                     activeBatchIndex = idx;
@@ -84,48 +79,37 @@
     }
 
     function filterBatch(batchIndex) {
-        var batches = getBatchData();
         var buttons = getGalleryButtons();
         var promptDisplay = document.getElementById('batch_prompt_display');
 
-        if (batchIndex === -1 || batches.length === 0) {
-            // Show ALL
+        if (batchIndex === -1 || sessionBatches.length === 0) {
             buttons.forEach(function(btn) { btn.style.display = ''; });
             if (promptDisplay) promptDisplay.textContent = '';
             return;
         }
 
-        // Calculate DOM offset for the selected batch
-        // Batches are stored oldest-first in array. Images are newest-first in DOM.
-        // So batch[last] images are at DOM positions 0..count-1
-        var totalImages = 0;
-        for (var i = 0; i < batches.length; i++) {
-            totalImages += batches[i].count;
-        }
-
+        // Images are newest-first in DOM. Batches are oldest-first in array.
         // DOM offset: images from batches AFTER this one (newer) come first
         var domStart = 0;
-        for (var j = batches.length - 1; j > batchIndex; j--) {
-            domStart += batches[j].count;
+        for (var j = sessionBatches.length - 1; j > batchIndex; j--) {
+            domStart += sessionBatches[j].count;
         }
-        var domEnd = domStart + batches[batchIndex].count;
+        var domEnd = domStart + sessionBatches[batchIndex].count;
 
         buttons.forEach(function(btn, i) {
             btn.style.display = (i >= domStart && i < domEnd) ? '' : 'none';
         });
 
         if (promptDisplay) {
-            promptDisplay.textContent = batches[batchIndex].prompt || '';
+            promptDisplay.textContent = sessionBatches[batchIndex].prompt || '';
         }
     }
 
     function approveSelectedImages() {
         if (typeof gallerySelectedImages === 'undefined' || gallerySelectedImages.size === 0) return;
         var urls = Array.from(gallerySelectedImages);
-        var el = document.querySelector('#approve_images_request textarea');
-        if (!el) {
-            el = document.querySelector('#approve_images_request input');
-        }
+        var el = document.querySelector('#approve_images_request textarea') ||
+                 document.querySelector('#approve_images_request input');
         if (el) {
             el.value = urls.join('\n');
             var e = new Event('input', { bubbles: true });
@@ -133,7 +117,6 @@
             el.dispatchEvent(e);
         }
 
-        // Show toast
         showToast('Saving ' + urls.length + ' image(s)...');
 
         // Uncheck all
@@ -164,29 +147,13 @@
     }
 
     function clearSession() {
+        sessionBatches = [];
+        previousGalleryCount = 0;
         activeBatchIndex = -1;
-        // Clear batch nav
         var nav = document.getElementById('session_batch_nav');
         if (nav) nav.innerHTML = '';
-        // Clear prompt display
         var pd = document.getElementById('batch_prompt_display');
         if (pd) pd.textContent = '';
-        // Trigger Python-side clear by clicking reset or setting gallery to empty
-        // We'll use a simple approach: find and set the session_batch_info to empty
-        var batchEl = document.querySelector('#session_batch_info');
-        if (batchEl) {
-            // Find the inner textarea/span and clear it
-            var inner = batchEl.querySelector('textarea') || batchEl.querySelector('input');
-            if (inner) {
-                inner.value = '[]';
-                var e = new Event('input', { bubbles: true });
-                Object.defineProperty(e, 'target', { value: inner });
-                inner.dispatchEvent(e);
-            }
-        }
-        // Clear the gallery visually
-        var gallery = document.querySelector('#final_gallery .grid-container');
-        if (gallery) gallery.innerHTML = '';
     }
 
     function updateSaveStarredButton() {
@@ -210,20 +177,32 @@
         };
     }
 
-    // Observe batch info changes to rebuild nav
-    var lastBatchJson = '';
+    // Detect new gallery images by observing DOM changes
     onAfterUiUpdate(function() {
-        var batches = getBatchData();
-        var json = JSON.stringify(batches);
-        if (json !== lastBatchJson) {
-            lastBatchJson = json;
+        var buttons = getGalleryButtons();
+        var currentCount = buttons.length;
+
+        if (currentCount > previousGalleryCount && currentCount > 0) {
+            var newCount = currentCount - previousGalleryCount;
+            var now = new Date();
+            var hours = now.getHours();
+            var ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            var minutes = now.getMinutes().toString().padStart(2, '0');
+            var timeStr = hours + ':' + minutes + ' ' + ampm;
+
+            sessionBatches.push({
+                count: newCount,
+                prompt: getCurrentPrompt(),
+                time: timeStr
+            });
+            previousGalleryCount = currentCount;
             buildBatchNav();
-            // Re-apply filter if a specific batch was selected
-            if (activeBatchIndex >= 0) {
-                filterBatch(activeBatchIndex);
-            }
+        } else if (currentCount === 0 && previousGalleryCount > 0) {
+            // Gallery was cleared (e.g. reset)
+            clearSession();
         }
-        // Also keep save starred button in sync
+
         updateSaveStarredButton();
     });
 
@@ -231,6 +210,7 @@
     window.sessionGallery = {
         buildBatchNav: buildBatchNav,
         filterBatch: filterBatch,
-        clearSession: clearSession
+        clearSession: clearSession,
+        getBatches: function() { return sessionBatches; }
     };
 })();
