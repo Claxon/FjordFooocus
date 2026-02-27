@@ -205,24 +205,50 @@ function patchCanvasForEraser() {
 
     setupRightClickEraser(container);
 
+    // Gradio sketch canvas layers:
+    //   interface (z=15) - brush cursor preview, SKIP
+    //   mask (z=13)      - where strokes go in mask mode (our inpaint)
+    //   temp (z=12)      - where strokes go in sketch mode
+    //   drawing (z=11)   - composite/commit target
     var canvases = container.querySelectorAll('canvas');
     canvases.forEach(function(canvas) {
         if (canvas._eraserPatched) return;
         canvas._eraserPatched = true;
 
-        // Skip the interface canvas (brush cursor preview, z-index >= 15)
         var zIndex = parseInt(window.getComputedStyle(canvas).zIndex) || 0;
-        if (zIndex >= 15) return;
+        if (zIndex >= 15) return; // Skip interface canvas
 
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Patch drawImage: intercepts the commit step where Gradio copies
-        // the temp canvas (with the white stroke) onto the drawing canvas.
-        // When erasing, destination-out uses the stroke's alpha to erase
-        // from the persistent mask instead of adding to it.
-        // Only activates when the source is a Canvas (the commit operation),
-        // not when loading images or backgrounds.
+        // Patch stroke(): In mask mode (our inpaint), Gradio draws
+        // directly on the mask canvas (z=13) via stroke(). When
+        // erasing, destination-out removes white pixels from the mask.
+        var origStroke = ctx.stroke;
+        ctx.stroke = function() {
+            if (isInpaintEraserActive()) {
+                this.globalCompositeOperation = 'destination-out';
+            }
+            var result = origStroke.apply(this, arguments);
+            this.globalCompositeOperation = 'source-over';
+            return result;
+        };
+
+        // Patch fill(): Same reason - LazyBrush uses fill() for
+        // dot/arc drawing at stroke start points.
+        var origFill = ctx.fill;
+        ctx.fill = function() {
+            if (isInpaintEraserActive()) {
+                this.globalCompositeOperation = 'destination-out';
+            }
+            var result = origFill.apply(this, arguments);
+            this.globalCompositeOperation = 'source-over';
+            return result;
+        };
+
+        // Patch drawImage(): In non-mask mode, Gradio commits strokes
+        // via drawImage(temp → drawing). Also catches any commit in
+        // mask mode. Only activates when source is a Canvas element.
         var origDrawImage = ctx.drawImage;
         ctx.drawImage = function(source) {
             if (isInpaintEraserActive() && source instanceof HTMLCanvasElement) {

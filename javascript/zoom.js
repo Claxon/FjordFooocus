@@ -641,14 +641,14 @@ onUiLoaded(async() => {
         gradioApp().addEventListener("mousemove", handleMoveByKey);
 
         // ---- Touch gesture support ----
-        // Single finger = paint (default Gradio behavior, no intervention needed)
-        // Two fingers = pan
-        // Pinch (two fingers distance change) = zoom
+        // Single finger = paint (default Gradio behavior, no intervention)
+        // Two fingers = pan + pinch zoom
+        // When second finger arrives, undo any accidental paint stroke
+        // from the first finger, then block further painting.
         let touchState = {
             active: false,
             lastTouches: null,
             lastDist: 0,
-            isPanning: false,
         };
 
         function getTouchDist(t1, t2) {
@@ -665,22 +665,30 @@ onUiLoaded(async() => {
         }
 
         targetElement.addEventListener("touchstart", function(e) {
-            if (e.touches.length === 2) {
-                // Two-finger gesture: prevent default to stop painting
+            if (e.touches.length >= 2) {
                 e.preventDefault();
+                e.stopPropagation();
+
+                // Undo any accidental paint from the first finger
+                // by clicking Gradio's Undo button
+                if (!touchState.active) {
+                    const undoBtn = targetElement.querySelector('button[aria-label="Undo"]');
+                    if (undoBtn) undoBtn.click();
+                }
+
                 touchState.active = true;
-                touchState.isPanning = true;
                 touchState.lastTouches = [
                     { x: e.touches[0].clientX, y: e.touches[0].clientY },
                     { x: e.touches[1].clientX, y: e.touches[1].clientY }
                 ];
                 touchState.lastDist = getTouchDist(e.touches[0], e.touches[1]);
             }
-        }, { passive: false });
+        }, { passive: false, capture: true });
 
         targetElement.addEventListener("touchmove", function(e) {
-            if (e.touches.length === 2 && touchState.active) {
+            if (e.touches.length >= 2 && touchState.active) {
                 e.preventDefault();
+                e.stopPropagation();
 
                 const t0 = e.touches[0];
                 const t1 = e.touches[1];
@@ -720,16 +728,19 @@ onUiLoaded(async() => {
                     { x: t1.clientX, y: t1.clientY }
                 ];
             }
-        }, { passive: false });
+        }, { passive: false, capture: true });
 
         targetElement.addEventListener("touchend", function(e) {
-            if (e.touches.length < 2) {
+            if (e.touches.length < 2 && touchState.active) {
+                // Stop pan/zoom mode. Prevent this touchend from
+                // being treated as a paint end by Gradio.
+                e.preventDefault();
+                e.stopPropagation();
                 touchState.active = false;
-                touchState.isPanning = false;
                 touchState.lastTouches = null;
                 touchState.lastDist = 0;
             }
-        });
+        }, { passive: false, capture: true });
     }
 
     applyZoomAndPan("#inpaint_canvas");
