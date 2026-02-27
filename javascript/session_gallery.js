@@ -63,13 +63,30 @@
         nav.appendChild(clearBtn);
     }
 
+    function updatePromptDisplay(batchIndex) {
+        var promptDisplay = document.getElementById('batch_prompt_display');
+        if (!promptDisplay) return;
+
+        if (sessionBatches.length === 0) {
+            promptDisplay.textContent = '';
+            return;
+        }
+
+        if (batchIndex === -1) {
+            // "All" selected: show the most recent batch prompt
+            var latest = sessionBatches[sessionBatches.length - 1];
+            promptDisplay.textContent = latest.prompt || '';
+        } else {
+            promptDisplay.textContent = sessionBatches[batchIndex].prompt || '';
+        }
+    }
+
     function filterBatch(batchIndex) {
         var buttons = getGalleryButtons();
-        var promptDisplay = document.getElementById('batch_prompt_display');
 
         if (batchIndex === -1 || sessionBatches.length === 0) {
             buttons.forEach(function(btn) { btn.style.display = ''; });
-            if (promptDisplay) promptDisplay.textContent = '';
+            updatePromptDisplay(batchIndex);
             return;
         }
 
@@ -85,9 +102,7 @@
             btn.style.display = (i >= domStart && i < domEnd) ? '' : 'none';
         });
 
-        if (promptDisplay) {
-            promptDisplay.textContent = sessionBatches[batchIndex].prompt || '';
-        }
+        updatePromptDisplay(batchIndex);
     }
 
     function showToast(message) {
@@ -160,6 +175,7 @@
             });
             previousGalleryCount = currentCount;
             buildBatchNav();
+            updatePromptDisplay(activeBatchIndex);
         } else if (currentCount === 0 && previousGalleryCount > 0) {
             // Gallery was cleared (e.g. reset)
             clearSession();

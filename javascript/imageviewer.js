@@ -408,10 +408,14 @@ onAfterUiUpdate(function() {
     }
     updateOnBackgroundChange();
 
-    // Add checkboxes and star icons to all gallery thumbnail buttons
+    // Add checkboxes and star icons only to grid (large) thumbnails, not thumbnail-small
     var galleryButtons = all_gallery_buttons();
-    galleryButtons.forEach(addCheckboxToGalleryButton);
-    galleryButtons.forEach(addStarToGalleryButton);
+    galleryButtons.forEach(function(btn) {
+        if (!btn.classList.contains('thumbnail-small')) {
+            addCheckboxToGalleryButton(btn);
+            addStarToGalleryButton(btn);
+        }
+    });
 
     // Clean up selections and stars for images no longer in any gallery
     var currentSrcs = new Set();
