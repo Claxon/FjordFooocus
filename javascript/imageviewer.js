@@ -228,7 +228,6 @@ function addCheckboxToGalleryButton(button) {
         var currentIndex = allButtons.indexOf(button);
 
         if (e.shiftKey && lastClickedCheckboxIndex !== -1 && currentIndex !== -1 && currentIndex !== lastClickedCheckboxIndex) {
-            // Shift-click: select/deselect range between last clicked and current
             var start = Math.min(lastClickedCheckboxIndex, currentIndex);
             var end = Math.max(lastClickedCheckboxIndex, currentIndex);
             var shouldCheck = checkbox.checked;
@@ -256,14 +255,71 @@ function addCheckboxToGalleryButton(button) {
     button.appendChild(checkbox);
 }
 
+// ===== Star (approve) icons on gallery thumbnails =====
+
+var galleryStarredImages = new Set();
+
+function updateStarredUI() {
+    // Update Save Starred button text (Gradio button: div#save_starred_btn > button)
+    var container = document.getElementById('save_starred_btn');
+    if (!container) return;
+    var btn = container.querySelector('button') || container;
+    var count = galleryStarredImages.size;
+    if (count > 0) {
+        btn.textContent = '\u2B50 Save Starred (' + count + ')';
+    } else {
+        btn.textContent = '\u2B50 Save Starred';
+    }
+}
+
+function addStarToGalleryButton(button) {
+    if (button.querySelector('.gallery-star')) return;
+
+    var star = document.createElement('span');
+    star.className = 'gallery-star';
+    star.title = 'Star for approval';
+
+    var src = getImageSrcFromButton(button);
+    if (src && galleryStarredImages.has(src)) {
+        star.textContent = '\u2605';
+        star.classList.add('starred');
+    } else {
+        star.textContent = '\u2606';
+    }
+
+    star.addEventListener('click', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        var imgSrc = getImageSrcFromButton(button);
+        if (!imgSrc) return;
+        if (galleryStarredImages.has(imgSrc)) {
+            galleryStarredImages.delete(imgSrc);
+            star.textContent = '\u2606';
+            star.classList.remove('starred');
+        } else {
+            galleryStarredImages.add(imgSrc);
+            star.textContent = '\u2605';
+            star.classList.add('starred');
+        }
+        updateStarredUI();
+    });
+    star.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+    });
+    button.appendChild(star);
+}
+
 function deleteSelectedImages() {
     if (gallerySelectedImages.size === 0) return;
     var urls = Array.from(gallerySelectedImages);
     sendDeleteRequest(urls);
     removeFromGalleryDOM(urls);
+    // Also remove from starred if present
+    urls.forEach(function(u) { galleryStarredImages.delete(u); });
     gallerySelectedImages.clear();
     lastClickedCheckboxIndex = -1;
     updateDeleteSelectedButton();
+    updateStarredUI();
 }
 
 // Create a "Delete Selected" button for a gallery element
@@ -352,11 +408,12 @@ onAfterUiUpdate(function() {
     }
     updateOnBackgroundChange();
 
-    // Add checkboxes to all gallery thumbnail buttons (both progress and final galleries)
+    // Add checkboxes and star icons to all gallery thumbnail buttons
     var galleryButtons = all_gallery_buttons();
     galleryButtons.forEach(addCheckboxToGalleryButton);
+    galleryButtons.forEach(addStarToGalleryButton);
 
-    // Clean up selections for images no longer in any gallery
+    // Clean up selections and stars for images no longer in any gallery
     var currentSrcs = new Set();
     galleryButtons.forEach(function(btn) {
         var src = getImageSrcFromButton(btn);
@@ -367,12 +424,17 @@ onAfterUiUpdate(function() {
             gallerySelectedImages.delete(src);
         }
     });
+    galleryStarredImages.forEach(function(src) {
+        if (!currentSrcs.has(src)) {
+            galleryStarredImages.delete(src);
+        }
+    });
 
-    // Ensure "Delete Selected" buttons exist for both galleries
+    // Ensure "Delete Selected" button exists for the final gallery only
     ensureDeleteButtonForGallery(document.getElementById('final_gallery'));
-    ensureDeleteButtonForGallery(document.getElementById('progress_gallery'));
 
     updateDeleteSelectedButton();
+    updateStarredUI();
 });
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -443,10 +505,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.body.appendChild(modal);
 
-    // Insert "Delete Selected" buttons near both galleries (retry for late renders)
+    // Insert "Delete Selected" button near the final gallery (retry for late renders)
     function insertDeleteButtons() {
         ensureDeleteButtonForGallery(document.getElementById('final_gallery'));
-        ensureDeleteButtonForGallery(document.getElementById('progress_gallery'));
     }
     insertDeleteButtons();
     setTimeout(insertDeleteButtons, 1000);

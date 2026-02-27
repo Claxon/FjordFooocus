@@ -195,6 +195,7 @@ with shared.gradio_root:
                     skip_button = gr.Button(label="Skip", value="Skip", elem_classes='type_row_half', elem_id='skip_button', visible=False)
                     stop_button = gr.Button(label="Stop", value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
                     queue_button = gr.Button(label="Queue Prompt", value="Queue Prompt", elem_classes='type_row_half', elem_id='queue_button', visible=True)
+                    save_starred_btn = gr.Button(label="Save Starred", value="\u2B50 Save Starred", elem_classes='type_row_half', elem_id='save_starred_btn', visible=True)
 
                     def stop_clicked(currentTask):
                         import ldm_patched.modules.model_management as model_management
@@ -1099,6 +1100,9 @@ with shared.gradio_root:
             add_to_queue, inputs=[prompt_queue, prompt],
             outputs=[prompt_queue, prompt_queue_display],
             queue=False, show_progress=False)
+
+        save_starred_btn.click(fn=lambda: None, inputs=[], outputs=[], queue=False, show_progress=False,
+                               _js='() => { if (window.sessionGallery && window.sessionGallery.approveStarredImages) window.sessionGallery.approveStarredImages(); }')
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, style_selections,
                              performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,

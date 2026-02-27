@@ -1,4 +1,4 @@
-// Session Gallery: batch navigation, filtering, and Save Starred
+// Session Gallery: batch navigation (dropdown filter), and starred approve
 // Tracks batches by observing gallery DOM changes (pure JS, no Python dependency)
 (function() {
     'use strict';
@@ -23,59 +23,44 @@
 
         if (sessionBatches.length === 0) return;
 
-        // ALL button
-        var allBtn = document.createElement('button');
-        allBtn.className = 'batch-nav-btn' + (activeBatchIndex === -1 ? ' active' : '');
-        allBtn.textContent = 'ALL';
-        allBtn.addEventListener('click', function() {
-            activeBatchIndex = -1;
-            filterBatch(-1);
-            buildBatchNav();
-        });
-        nav.appendChild(allBtn);
+        // Dropdown filter
+        var select = document.createElement('select');
+        select.id = 'batch_filter_select';
 
-        // Per-batch buttons (newest first in display)
+        var allOpt = document.createElement('option');
+        allOpt.value = '-1';
+        allOpt.textContent = 'All batches';
+        if (activeBatchIndex === -1) allOpt.selected = true;
+        select.appendChild(allOpt);
+
+        // Per-batch options (newest first in display)
         for (var i = sessionBatches.length - 1; i >= 0; i--) {
-            (function(idx) {
-                var batch = sessionBatches[idx];
-                var btn = document.createElement('button');
-                btn.className = 'batch-nav-btn' + (activeBatchIndex === idx ? ' active' : '');
-                var preview = batch.prompt ? batch.prompt.split(/\s+/).slice(0, 3).join(' ') : '...';
-                btn.textContent = batch.time + ' \u2014 ' + preview;
-                btn.title = batch.prompt || '';
-                btn.addEventListener('click', function() {
-                    activeBatchIndex = idx;
-                    filterBatch(idx);
-                    buildBatchNav();
-                });
-                nav.appendChild(btn);
-            })(i);
+            var batch = sessionBatches[i];
+            var opt = document.createElement('option');
+            opt.value = String(i);
+            var preview = batch.prompt ? batch.prompt.split(/\s+/).slice(0, 4).join(' ') : '...';
+            if (preview.length > 30) preview = preview.substring(0, 30) + '...';
+            opt.textContent = batch.time + ' \u2014 ' + preview;
+            if (activeBatchIndex === i) opt.selected = true;
+            select.appendChild(opt);
         }
 
-        // Save Starred button
-        var saveBtn = document.createElement('button');
-        saveBtn.className = 'save-starred-btn';
-        saveBtn.id = 'save_starred_btn';
-        saveBtn.textContent = '\u2B50 Save Starred';
-        saveBtn.style.display = 'none';
-        saveBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            approveSelectedImages();
+        select.addEventListener('change', function() {
+            var idx = parseInt(this.value, 10);
+            activeBatchIndex = idx;
+            filterBatch(idx);
         });
-        nav.appendChild(saveBtn);
+        nav.appendChild(select);
 
         // Clear Session button
         var clearBtn = document.createElement('button');
-        clearBtn.className = 'batch-nav-btn batch-clear-btn';
+        clearBtn.className = 'batch-clear-btn';
         clearBtn.textContent = '\uD83D\uDDD1 Clear';
         clearBtn.title = 'Clear session gallery';
         clearBtn.addEventListener('click', function() {
             clearSession();
         });
         nav.appendChild(clearBtn);
-
-        updateSaveStarredButton();
     }
 
     function filterBatch(batchIndex) {
@@ -105,34 +90,6 @@
         }
     }
 
-    function approveSelectedImages() {
-        if (typeof gallerySelectedImages === 'undefined' || gallerySelectedImages.size === 0) return;
-        var urls = Array.from(gallerySelectedImages);
-        var el = document.querySelector('#approve_images_request textarea') ||
-                 document.querySelector('#approve_images_request input');
-        if (el) {
-            el.value = urls.join('\n');
-            var e = new Event('input', { bubbles: true });
-            Object.defineProperty(e, 'target', { value: el });
-            el.dispatchEvent(e);
-        }
-
-        showToast('Saving ' + urls.length + ' image(s)...');
-
-        // Uncheck all
-        gallerySelectedImages.clear();
-        document.querySelectorAll('.gallery-select-checkbox').forEach(function(cb) {
-            cb.checked = false;
-        });
-        document.querySelectorAll('.gallery-checked').forEach(function(el) {
-            el.classList.remove('gallery-checked');
-        });
-        if (typeof updateDeleteSelectedButton === 'function') {
-            updateDeleteSelectedButton();
-        }
-        updateSaveStarredButton();
-    }
-
     function showToast(message) {
         var existing = document.getElementById('fooocus_toast');
         if (existing) existing.remove();
@@ -156,25 +113,30 @@
         if (pd) pd.textContent = '';
     }
 
-    function updateSaveStarredButton() {
-        var btn = document.getElementById('save_starred_btn');
-        if (!btn) return;
-        var count = (typeof gallerySelectedImages !== 'undefined') ? gallerySelectedImages.size : 0;
-        if (count > 0) {
-            btn.style.display = 'inline-flex';
-            btn.textContent = '\u2B50 Save Starred (' + count + ')';
-        } else {
-            btn.style.display = 'none';
+    // Send starred images to Python for approval (uses galleryStarredImages from imageviewer.js)
+    function approveStarredImages() {
+        if (typeof galleryStarredImages === 'undefined' || galleryStarredImages.size === 0) return;
+        var urls = Array.from(galleryStarredImages);
+        var el = document.querySelector('#approve_images_request textarea') ||
+                 document.querySelector('#approve_images_request input');
+        if (el) {
+            el.value = urls.join('\n');
+            var e = new Event('input', { bubbles: true });
+            Object.defineProperty(e, 'target', { value: el });
+            el.dispatchEvent(e);
         }
-    }
 
-    // Hook into the existing checkbox system to update Save Starred button
-    var origUpdateDelete = window.updateDeleteSelectedButton;
-    if (typeof origUpdateDelete === 'function') {
-        window.updateDeleteSelectedButton = function() {
-            origUpdateDelete();
-            updateSaveStarredButton();
-        };
+        showToast('Saving ' + urls.length + ' starred image(s)...');
+
+        // Clear all stars
+        galleryStarredImages.clear();
+        document.querySelectorAll('.gallery-star.starred').forEach(function(star) {
+            star.textContent = '\u2606';
+            star.classList.remove('starred');
+        });
+        if (typeof updateStarredUI === 'function') {
+            updateStarredUI();
+        }
     }
 
     // Detect new gallery images by observing DOM changes
@@ -202,8 +164,6 @@
             // Gallery was cleared (e.g. reset)
             clearSession();
         }
-
-        updateSaveStarredButton();
     });
 
     // Expose for external use
@@ -211,6 +171,7 @@
         buildBatchNav: buildBatchNav,
         filterBatch: filterBatch,
         clearSession: clearSession,
-        getBatches: function() { return sessionBatches; }
+        getBatches: function() { return sessionBatches; },
+        approveStarredImages: approveStarredImages
     };
 })();
