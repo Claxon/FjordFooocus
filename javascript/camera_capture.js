@@ -18,6 +18,14 @@
 
     // ---- Helpers ----
 
+    function isSecureContext() {
+        // getUserMedia requires HTTPS or localhost
+        return window.isSecureContext ||
+               location.protocol === 'https:' ||
+               location.hostname === 'localhost' ||
+               location.hostname === '127.0.0.1';
+    }
+
     function isGenerationIdle() {
         var genBtnWrap = document.getElementById('generate_button');
         var stopBtnWrap = document.getElementById('stop_button');
@@ -322,9 +330,55 @@
         }, 500);
     }
 
+    // ---- File-picker camera fallback (works on HTTP / Android) ----
+
+    var _cameraFileInput = null;
+    function getCameraFileInput() {
+        if (!_cameraFileInput) {
+            _cameraFileInput = document.createElement('input');
+            _cameraFileInput.type = 'file';
+            _cameraFileInput.accept = 'image/*';
+            _cameraFileInput.setAttribute('capture', 'environment'); // opens rear camera on mobile
+            _cameraFileInput.style.display = 'none';
+            document.body.appendChild(_cameraFileInput);
+        }
+        return _cameraFileInput;
+    }
+
+    function captureWithFilePicker(targetSelector) {
+        // Auto-enable Input Image checkbox
+        ensureInputImageEnabled();
+
+        var fileInput = getCameraFileInput();
+        // Clone to reset any previous handler
+        var newInput = fileInput.cloneNode(true);
+        fileInput.parentNode.replaceChild(newInput, fileInput);
+        _cameraFileInput = newInput;
+
+        newInput.onchange = function() {
+            if (newInput.files && newInput.files.length > 0) {
+                var file = newInput.files[0];
+                if (file.type.startsWith('image/')) {
+                    if (typeof injectImageIntoGradio === 'function') {
+                        injectImageIntoGradio(targetSelector, file);
+                    }
+                }
+            }
+            newInput.value = '';
+        };
+
+        newInput.click();
+    }
+
     // ---- Toggle / Start / Stop ----
 
     window.toggleCamera = function(targetSelector) {
+        // On insecure contexts (plain HTTP), fall back to file picker capture
+        if (!isSecureContext()) {
+            captureWithFilePicker(targetSelector);
+            return;
+        }
+
         if (cameraState !== 'IDLE') {
             if (activeTarget === targetSelector) {
                 // Same target — toggle off
