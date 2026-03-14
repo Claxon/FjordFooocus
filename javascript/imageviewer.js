@@ -14,6 +14,7 @@ function showModal(event) {
     }
     lb.style.display = "flex";
     lb.focus();
+    updateStarredUI();
 
     event.stopPropagation();
 }
@@ -42,7 +43,8 @@ function updateOnBackgroundChange() {
 function all_gallery_buttons() {
     var allGalleryButtons = gradioApp().querySelectorAll(
         '.image_gallery .thumbnails > .thumbnail-item.thumbnail-small, ' +
-        '.image_gallery .grid-container > .thumbnail-item'
+        '.image_gallery .grid-container > .thumbnail-item, ' +
+        '.image_gallery .grid-container .batch-group-grid > .thumbnail-item'
     );
     var visibleGalleryButtons = [];
     allGalleryButtons.forEach(function(elem) {
@@ -86,6 +88,7 @@ function modalImageSwitch(offset) {
             setTimeout(function() {
                 modal.focus();
             }, 10);
+            updateStarredUI();
         }
     }
 }
@@ -153,6 +156,11 @@ function modalKeyHandler(event) {
     switch (event.key) {
     case "s":
         saveImage();
+        break;
+    case "f":
+    case "F":
+        var starBtn = document.getElementById('modalStar');
+        if (starBtn) starBtn.click();
         break;
     case "Delete":
         deleteCurrentImage();
@@ -260,15 +268,41 @@ function addCheckboxToGalleryButton(button) {
 var galleryStarredImages = new Set();
 
 function updateStarredUI() {
-    // Update Save Starred button text (Gradio button: div#save_starred_btn > button)
-    var container = document.getElementById('save_starred_btn');
-    if (!container) return;
-    var btn = container.querySelector('button') || container;
-    var count = galleryStarredImages.size;
-    if (count > 0) {
-        btn.textContent = '\u2B50 Save Starred (' + count + ')';
-    } else {
-        btn.textContent = '\u2B50 Save Starred';
+    // Update lightbox star button if modal is open
+    var modalStar = document.getElementById('modalStar');
+    if (modalStar) {
+        var modalImage = document.getElementById('modalImage');
+        if (modalImage && modalImage.src && galleryStarredImages.has(modalImage.src)) {
+            modalStar.innerHTML = '&#9733;';
+            modalStar.classList.add('starred');
+        } else {
+            modalStar.innerHTML = '&#9734;';
+            modalStar.classList.remove('starred');
+        }
+    }
+}
+
+// Send a single image URL to Python for immediate approval
+function sendApproveRequest(url) {
+    var el = document.querySelector('#approve_images_request textarea') ||
+             document.querySelector('#approve_images_request input');
+    if (el) {
+        el.value = url;
+        var e = new Event('input', { bubbles: true });
+        Object.defineProperty(e, 'target', { value: el });
+        el.dispatchEvent(e);
+    }
+}
+
+// Send a single image URL to Python for unapproval (remove from approved)
+function sendUnapproveRequest(url) {
+    var el = document.querySelector('#unapprove_images_request textarea') ||
+             document.querySelector('#unapprove_images_request input');
+    if (el) {
+        el.value = url;
+        var e = new Event('input', { bubbles: true });
+        Object.defineProperty(e, 'target', { value: el });
+        el.dispatchEvent(e);
     }
 }
 
@@ -296,10 +330,12 @@ function addStarToGalleryButton(button) {
             galleryStarredImages.delete(imgSrc);
             star.textContent = '\u2606';
             star.classList.remove('starred');
+            sendUnapproveRequest(imgSrc);
         } else {
             galleryStarredImages.add(imgSrc);
             star.textContent = '\u2605';
             star.classList.add('starred');
+            sendApproveRequest(imgSrc);
         }
         updateStarredUI();
     });
@@ -408,6 +444,62 @@ onAfterUiUpdate(function() {
     }
     updateOnBackgroundChange();
 
+    // Add star overlay to the large selected-image preview
+    fullImg_preview.forEach(function(img) {
+        var container = img.parentElement;
+        if (!container || container.querySelector('.preview-star')) return;
+        container.style.position = 'relative';
+        var star = document.createElement('span');
+        star.className = 'preview-star';
+        star.title = 'Star for approval';
+        star.textContent = '\u2606';
+        star.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            var src = img.src;
+            if (!src) return;
+            if (galleryStarredImages.has(src)) {
+                galleryStarredImages.delete(src);
+                star.textContent = '\u2606';
+                star.classList.remove('starred');
+                sendUnapproveRequest(src);
+            } else {
+                galleryStarredImages.add(src);
+                star.textContent = '\u2605';
+                star.classList.add('starred');
+                sendApproveRequest(src);
+            }
+            // Sync gallery thumbnail star
+            all_gallery_buttons().forEach(function(btn) {
+                var bimg = btn.querySelector('img');
+                if (bimg && bimg.src === src) {
+                    var s = btn.querySelector('.gallery-star');
+                    if (s) {
+                        s.textContent = galleryStarredImages.has(src) ? '\u2605' : '\u2606';
+                        s.classList.toggle('starred', galleryStarredImages.has(src));
+                    }
+                }
+            });
+            updateStarredUI();
+        });
+        star.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        container.appendChild(star);
+    });
+
+    // Update preview star state when selected image changes
+    fullImg_preview.forEach(function(img) {
+        var star = img.parentElement && img.parentElement.querySelector('.preview-star');
+        if (star && img.src) {
+            if (galleryStarredImages.has(img.src)) {
+                star.textContent = '\u2605';
+                star.classList.add('starred');
+            } else {
+                star.textContent = '\u2606';
+                star.classList.remove('starred');
+            }
+        }
+    });
+
     // Add checkboxes and star icons only to grid (large) thumbnails, not thumbnail-small
     var galleryButtons = all_gallery_buttons();
     galleryButtons.forEach(function(btn) {
@@ -459,6 +551,48 @@ document.addEventListener("DOMContentLoaded", function() {
     modalZoom.addEventListener('click', modalZoomToggle, true);
     modalZoom.title = "Toggle zoomed view";
     modalControls.appendChild(modalZoom);
+
+    const modalStar = document.createElement('span');
+    modalStar.id = 'modalStar';
+    modalStar.className = 'modalStar cursor';
+    modalStar.innerHTML = '&#9734;';
+    modalStar.title = 'Star / unstar for approval (F)';
+    modalStar.addEventListener('click', function(event) {
+        event.stopPropagation();
+        var modalImage = document.getElementById('modalImage');
+        if (!modalImage || !modalImage.src) return;
+        var src = modalImage.src;
+        if (galleryStarredImages.has(src)) {
+            galleryStarredImages.delete(src);
+            modalStar.innerHTML = '&#9734;';
+            modalStar.classList.remove('starred');
+            sendUnapproveRequest(src);
+        } else {
+            galleryStarredImages.add(src);
+            modalStar.innerHTML = '&#9733;';
+            modalStar.classList.add('starred');
+            sendApproveRequest(src);
+        }
+        // Sync the gallery thumbnail star
+        var galleryButtons = all_gallery_buttons();
+        galleryButtons.forEach(function(btn) {
+            var img = btn.querySelector('img');
+            if (img && img.src === src) {
+                var starEl = btn.querySelector('.gallery-star');
+                if (starEl) {
+                    if (galleryStarredImages.has(src)) {
+                        starEl.textContent = '\u2605';
+                        starEl.classList.add('starred');
+                    } else {
+                        starEl.textContent = '\u2606';
+                        starEl.classList.remove('starred');
+                    }
+                }
+            }
+        });
+        updateStarredUI();
+    }, true);
+    modalControls.appendChild(modalStar);
 
     const modalDelete = document.createElement('span');
     modalDelete.className = 'modalDelete cursor';

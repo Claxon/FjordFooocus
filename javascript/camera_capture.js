@@ -1,43 +1,46 @@
-// Camera Capture: continuous webcam-to-generation loop
-// Toggle camera on → shows live preview → captures frame when idle → triggers generation → repeats
+// Camera Capture: flag-toggle camera targets + Live Generate continuous loop
+// Camera buttons toggle which inputs receive camera frames (multiple can be flagged).
+// "Live Generate" starts the webcam stream + capture loop, injecting each frame into
+// ALL flagged targets, optionally generating a mask first, then clicking Generate.
 (function() {
     'use strict';
 
     // ---- State ----
-    var cameraState = 'IDLE'; // IDLE | PREVIEWING | CAPTURING | WAITING_FOR_IDLE
+    var liveState = 'IDLE'; // IDLE | PREVIEWING | CAPTURING | WAITING_FOR_IDLE | WAITING_FOR_MASK
+    var cameraTargets = new Set();  // Set of target selectors, e.g. '#uov_input_image'
     var mediaStream = null;
-    var activeTarget = null;  // e.g. '#uov_input_image'
     var pollInterval = null;
     var previewContainer = null;
     var videoElement = null;
     var statusElement = null;
     var deviceSelect = null;
 
-    // ---- localStorage keys ----
+    // ---- Constants ----
     var PREF_DEVICE_ID = 'fjord_camera_device_id';
 
-    // ---- Helpers ----
+    // Map button elem_ids to their Gradio image target selectors
+    var BUTTON_TARGET_MAP = {
+        'uov_camera_btn': '#uov_input_image',
+        'inpaint_camera_btn': '#inpaint_canvas',
+        'mask_camera_btn': '#inpaint_mask_canvas',
+        'enhance_camera_btn': '#enhance_input_image',
+        'ip_camera_btn_1': '#ip_image_1',
+        'ip_camera_btn_2': '#ip_image_2',
+        'ip_camera_btn_3': '#ip_image_3',
+        'ip_camera_btn_4': '#ip_image_4'
+    };
 
-    function isSecureContext() {
-        // getUserMedia requires HTTPS or localhost
-        return window.isSecureContext ||
-               location.protocol === 'https:' ||
-               location.hostname === 'localhost' ||
-               location.hostname === '127.0.0.1';
-    }
+    // ---- Helpers ----
 
     function isGenerationIdle() {
         var genBtnWrap = document.getElementById('generate_button');
         var stopBtnWrap = document.getElementById('stop_button');
         var queueDisplay = document.getElementById('prompt_queue_display');
 
-        // generate_button wrapper must be visible
         var genVisible = genBtnWrap && genBtnWrap.offsetParent !== null
                          && !genBtnWrap.classList.contains('hidden');
-        // stop_button must be hidden
         var stopHidden = !stopBtnWrap || !stopBtnWrap.offsetParent
                          || stopBtnWrap.classList.contains('hidden');
-        // queue must be empty
         var queueEmpty = !queueDisplay || !queueDisplay.offsetParent
                          || !queueDisplay.innerText.includes('Queue');
 
@@ -60,10 +63,10 @@
         var closeBtn = document.createElement('button');
         closeBtn.className = 'camera-close-btn';
         closeBtn.textContent = '\u2715';
-        closeBtn.title = 'Stop camera';
+        closeBtn.title = 'Stop live generate';
         closeBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            stopCamera();
+            stopLiveGenerate();
         });
         previewContainer.appendChild(closeBtn);
 
@@ -83,12 +86,10 @@
         deviceSelect.id = 'camera_device_select_overlay';
         deviceSelect.addEventListener('change', function() {
             localStorage.setItem(PREF_DEVICE_ID, this.value);
-            // Restart stream with new device
             if (mediaStream) {
                 stopStream();
                 startStream(this.value);
             }
-            // Sync settings tab selector
             syncSettingsSelector(this.value);
         });
         controls.appendChild(deviceSelect);
@@ -100,9 +101,7 @@
         statusElement.textContent = 'Starting...';
         previewContainer.appendChild(statusElement);
 
-        // Make draggable
         makeDraggable(previewContainer);
-
         document.body.appendChild(previewContainer);
     }
 
@@ -111,7 +110,6 @@
         var offsetX = 0, offsetY = 0;
 
         el.addEventListener('mousedown', function(e) {
-            // Don't drag from controls
             if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'VIDEO') return;
             isDragging = true;
             offsetX = e.clientX - el.getBoundingClientRect().left;
@@ -183,25 +181,22 @@
                 videoElement.srcObject = mediaStream;
             }
 
-            // Listen for track ending (camera disconnected)
             mediaStream.getVideoTracks().forEach(function(track) {
                 track.addEventListener('ended', function() {
-                    if (cameraState !== 'IDLE') {
+                    if (liveState !== 'IDLE') {
                         console.warn('Camera track ended unexpectedly');
-                        stopCamera();
+                        stopLiveGenerate();
                     }
                 });
             });
 
-            // Re-populate device lists after permission granted (labels now available)
             if (deviceSelect) await populateDeviceList(deviceSelect);
             var settingsSelect = document.getElementById('camera_device_select_settings');
             if (settingsSelect) await populateDeviceList(settingsSelect);
 
             return true;
         } catch (err) {
-            console.error('Camera access failed:', err);
-            alert('Could not access camera: ' + err.message);
+            console.warn('Camera access failed:', err.message);
             return false;
         }
     }
@@ -254,54 +249,169 @@
         }
     }
 
-    // ---- Capture and generate ----
+    // ---- Advanced masking helpers ----
+
+    function isAdvancedMaskingEnabled() {
+        var labels = document.querySelectorAll('label');
+        for (var i = 0; i < labels.length; i++) {
+            var span = labels[i].querySelector('span');
+            if (span && span.textContent.trim() === 'Enable Advanced Masking Features') {
+                var input = labels[i].querySelector('input[type="checkbox"]');
+                return input && input.checked;
+            }
+        }
+        return false;
+    }
+
+    function clickGenerateMask() {
+        var maskBtnWrap = document.getElementById('generate_mask_button');
+        if (!maskBtnWrap) {
+            console.warn('[LiveGen] generate_mask_button not found');
+            return false;
+        }
+        var maskBtn = maskBtnWrap.querySelector('button') || maskBtnWrap;
+        maskBtn.click();
+        return true;
+    }
+
+    function waitForMaskCompletion(callback) {
+        // Poll until the Gradio mask generation call completes.
+        // Detect completion by checking that the generate_mask_button is no longer
+        // in a loading/progress state.
+        var maskPollInterval = setInterval(function() {
+            if (liveState === 'IDLE') {
+                clearInterval(maskPollInterval);
+                return;
+            }
+
+            // Gradio wraps queued-call components in a .wrap element with class
+            // 'generating' while processing. Check the mask button's ancestor.
+            var maskBtnWrap = document.getElementById('generate_mask_button');
+            if (!maskBtnWrap) {
+                clearInterval(maskPollInterval);
+                callback();
+                return;
+            }
+
+            // Walk up to find any ancestor with .generating class
+            var el = maskBtnWrap;
+            var isGenerating = false;
+            while (el && el !== document.body) {
+                if (el.classList.contains('generating')) {
+                    isGenerating = true;
+                    break;
+                }
+                el = el.parentElement;
+            }
+
+            // Also check for the Gradio progress-bar within the mask output area
+            var maskCanvas = document.getElementById('inpaint_mask_canvas');
+            if (maskCanvas) {
+                var wrap = maskCanvas.closest('.wrap');
+                if (wrap && wrap.classList.contains('generating')) {
+                    isGenerating = true;
+                }
+            }
+
+            if (!isGenerating) {
+                clearInterval(maskPollInterval);
+                setTimeout(callback, 300);
+            }
+        }, 500);
+
+        // Safety timeout: 60s
+        setTimeout(function() {
+            clearInterval(maskPollInterval);
+            if (liveState === 'WAITING_FOR_MASK') {
+                console.warn('[LiveGen] Mask generation timeout, proceeding');
+                callback();
+            }
+        }, 60000);
+    }
+
+    // ---- Trigger generation ----
+
+    function triggerGenerate() {
+        if (liveState === 'IDLE') return;
+
+        var genBtnWrap = document.getElementById('generate_button');
+        var genBtn = genBtnWrap ? genBtnWrap.querySelector('button') || genBtnWrap : null;
+        if (genBtn) {
+            genBtn.click();
+        }
+
+        liveState = 'WAITING_FOR_IDLE';
+        setStatus('Generating...');
+        updateAllCameraButtonUI();
+        startIdlePolling();
+    }
+
+    // ---- Capture and generate (multi-target) ----
 
     async function captureAndGenerate() {
-        if (cameraState === 'IDLE') return;
+        if (liveState === 'IDLE') return;
 
-        cameraState = 'CAPTURING';
+        liveState = 'CAPTURING';
         setStatus('Capturing frame...');
-        updateButtonUI();
+        updateAllCameraButtonUI();
 
         var file = await captureFrame();
-        if (!file || cameraState === 'IDLE') {
-            // Camera was stopped or capture failed
-            if (cameraState !== 'IDLE') {
-                cameraState = 'PREVIEWING';
+        if (!file || liveState === 'IDLE') {
+            if (liveState !== 'IDLE') {
+                liveState = 'PREVIEWING';
                 setStatus('Capture failed, retrying...');
                 setTimeout(function() {
-                    if (cameraState === 'PREVIEWING') startIdlePolling();
+                    if (liveState === 'PREVIEWING') startIdlePolling();
                 }, 2000);
             }
             return;
         }
 
-        // Inject frame into the target Gradio image component
-        if (typeof injectImageIntoGradio === 'function') {
-            injectImageIntoGradio(activeTarget, file);
-        } else {
-            console.error('injectImageIntoGradio not available');
-            stopCamera();
-            return;
-        }
-
-        setStatus('Injected frame, starting generation...');
-
-        // Wait for Gradio to process the image, then click generate
-        setTimeout(function() {
-            if (cameraState === 'IDLE') return;
-
-            var genBtnWrap = document.getElementById('generate_button');
-            var genBtn = genBtnWrap ? genBtnWrap.querySelector('button') || genBtnWrap : null;
-            if (genBtn) {
-                genBtn.click();
+        // Inject frame into ALL flagged targets
+        var inpaintIsFlagged = false;
+        var targetCount = 0;
+        cameraTargets.forEach(function(target) {
+            if (typeof injectImageIntoGradio === 'function') {
+                injectImageIntoGradio(target, file);
+                targetCount++;
             }
+            if (target === '#inpaint_canvas') {
+                inpaintIsFlagged = true;
+            }
+        });
 
-            cameraState = 'WAITING_FOR_IDLE';
-            setStatus('Generating...');
-            updateButtonUI();
-            startIdlePolling();
-        }, 600);
+        setStatus('Injected into ' + targetCount + ' target(s)...');
+
+        // Check if we need to generate a mask first
+        if (inpaintIsFlagged && isAdvancedMaskingEnabled()) {
+            liveState = 'WAITING_FOR_MASK';
+            setStatus('Generating mask...');
+            updateAllCameraButtonUI();
+
+            // Wait for Gradio to process the injected image, then click mask generation
+            setTimeout(function() {
+                if (liveState === 'IDLE') return;
+                if (!clickGenerateMask()) {
+                    // Mask button not found, proceed without mask
+                    triggerGenerate();
+                    return;
+                }
+                waitForMaskCompletion(function() {
+                    if (liveState === 'IDLE') return;
+                    // Small delay for Gradio to finalize mask output
+                    setTimeout(function() {
+                        if (liveState === 'IDLE') return;
+                        triggerGenerate();
+                    }, 300);
+                });
+            }, 800);
+        } else {
+            // No mask needed — proceed directly
+            setTimeout(function() {
+                if (liveState === 'IDLE') return;
+                triggerGenerate();
+            }, 600);
+        }
     }
 
     // ---- Idle polling ----
@@ -310,19 +420,19 @@
         if (pollInterval) clearInterval(pollInterval);
 
         pollInterval = setInterval(function() {
-            if (cameraState === 'IDLE') {
+            if (liveState === 'IDLE') {
                 clearInterval(pollInterval);
                 pollInterval = null;
                 return;
             }
 
-            if (cameraState === 'WAITING_FOR_IDLE' && isGenerationIdle()) {
+            if (liveState === 'WAITING_FOR_IDLE' && isGenerationIdle()) {
                 clearInterval(pollInterval);
                 pollInterval = null;
 
-                // Wait a bit to avoid racing with queue auto-continue (1s delay)
+                // Wait a bit to avoid racing with queue auto-continue
                 setTimeout(function() {
-                    if (cameraState === 'WAITING_FOR_IDLE' || cameraState === 'PREVIEWING') {
+                    if (liveState === 'WAITING_FOR_IDLE' || liveState === 'PREVIEWING') {
                         captureAndGenerate();
                     }
                 }, 1500);
@@ -338,7 +448,7 @@
             _cameraFileInput = document.createElement('input');
             _cameraFileInput.type = 'file';
             _cameraFileInput.accept = 'image/*';
-            _cameraFileInput.setAttribute('capture', 'environment'); // opens rear camera on mobile
+            _cameraFileInput.setAttribute('capture', 'environment');
             _cameraFileInput.style.display = 'none';
             document.body.appendChild(_cameraFileInput);
         }
@@ -346,11 +456,9 @@
     }
 
     function captureWithFilePicker(targetSelector) {
-        // Auto-enable Input Image checkbox
         ensureInputImageEnabled();
 
         var fileInput = getCameraFileInput();
-        // Clone to reset any previous handler
         var newInput = fileInput.cloneNode(true);
         fileInput.parentNode.replaceChild(newInput, fileInput);
         _cameraFileInput = newInput;
@@ -359,9 +467,12 @@
             if (newInput.files && newInput.files.length > 0) {
                 var file = newInput.files[0];
                 if (file.type.startsWith('image/')) {
-                    if (typeof injectImageIntoGradio === 'function') {
-                        injectImageIntoGradio(targetSelector, file);
-                    }
+                    // Inject into ALL flagged targets (not just the one clicked)
+                    cameraTargets.forEach(function(target) {
+                        if (typeof injectImageIntoGradio === 'function') {
+                            injectImageIntoGradio(target, file);
+                        }
+                    });
                 }
             }
             newInput.value = '';
@@ -370,59 +481,59 @@
         newInput.click();
     }
 
-    // ---- Toggle / Start / Stop ----
+    // ---- Camera flag toggle ----
 
     window.toggleCamera = function(targetSelector) {
-        // On insecure contexts (plain HTTP), fall back to file picker capture
-        if (!isSecureContext()) {
-            captureWithFilePicker(targetSelector);
-            return;
-        }
-
-        if (cameraState !== 'IDLE') {
-            if (activeTarget === targetSelector) {
-                // Same target — toggle off
-                stopCamera();
-            } else {
-                // Different target — switch
-                stopCamera();
-                setTimeout(function() { startCamera(targetSelector); }, 100);
-            }
+        if (cameraTargets.has(targetSelector)) {
+            cameraTargets.delete(targetSelector);
         } else {
-            startCamera(targetSelector);
+            cameraTargets.add(targetSelector);
+            ensureInputImageEnabled();
+        }
+        updateAllCameraButtonUI();
+    };
+
+    // ---- Live Generate toggle / start / stop ----
+
+    window.toggleLiveGenerate = function() {
+        if (liveState !== 'IDLE') {
+            stopLiveGenerate();
+        } else {
+            startLiveGenerate();
         }
     };
 
-    async function startCamera(targetSelector) {
-        activeTarget = targetSelector;
+    async function startLiveGenerate() {
+        if (cameraTargets.size === 0) {
+            console.warn('[LiveGen] No camera targets flagged');
+            setStatus('Flag at least one camera target first');
+            return;
+        }
 
-        // Auto-enable Input Image checkbox
         ensureInputImageEnabled();
 
-        // Create overlay if needed
         createPreviewOverlay();
         previewContainer.style.display = 'block';
         setStatus('Starting camera...');
 
-        // Start stream
         var deviceId = localStorage.getItem(PREF_DEVICE_ID) || '';
         var success = await startStream(deviceId || undefined);
         if (!success) {
-            stopCamera();
+            stopLiveGenerate();
+            captureWithFilePicker(Array.from(cameraTargets)[0]);
             return;
         }
 
-        cameraState = 'PREVIEWING';
-        setStatus('Camera active — waiting to capture...');
-        updateButtonUI();
+        liveState = 'PREVIEWING';
+        setStatus('Camera active \u2014 waiting to capture...');
+        updateAllCameraButtonUI();
 
-        // Start first capture check after short delay
         setTimeout(function() {
-            if (cameraState === 'PREVIEWING') {
+            if (liveState === 'PREVIEWING') {
                 if (isGenerationIdle()) {
                     captureAndGenerate();
                 } else {
-                    cameraState = 'WAITING_FOR_IDLE';
+                    liveState = 'WAITING_FOR_IDLE';
                     setStatus('Waiting for generation to finish...');
                     startIdlePolling();
                 }
@@ -430,9 +541,9 @@
         }, 1000);
     }
 
-    function stopCamera() {
-        cameraState = 'IDLE';
-        activeTarget = null;
+    function stopLiveGenerate() {
+        liveState = 'IDLE';
+        // Flags persist — don't clear cameraTargets
         if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
@@ -442,25 +553,37 @@
             previewContainer.style.display = 'none';
         }
         setStatus('');
-        updateButtonUI();
+        updateAllCameraButtonUI();
     }
 
     // ---- UI updates ----
 
-    function updateButtonUI() {
-        var btnIds = ['uov_camera_btn', 'enhance_camera_btn'];
-        btnIds.forEach(function(id) {
-            var wrap = document.getElementById(id);
+    function updateAllCameraButtonUI() {
+        // Update each camera button's flagged state
+        Object.keys(BUTTON_TARGET_MAP).forEach(function(btnId) {
+            var wrap = document.getElementById(btnId);
             if (!wrap) return;
             var btn = wrap.querySelector('button') || wrap;
-            if (cameraState !== 'IDLE') {
-                btn.classList.add('camera-active');
-                btn.textContent = '\u23F9 Stop Camera';
+            var target = BUTTON_TARGET_MAP[btnId];
+            if (cameraTargets.has(target)) {
+                btn.classList.add('camera-flagged');
             } else {
-                btn.classList.remove('camera-active');
-                btn.textContent = '\uD83D\uDCF7 Camera';
+                btn.classList.remove('camera-flagged');
             }
         });
+
+        // Update Live Generate button
+        var liveWrap = document.getElementById('live_generate_button');
+        if (liveWrap) {
+            var liveBtn = liveWrap.querySelector('button') || liveWrap;
+            if (liveState !== 'IDLE') {
+                liveBtn.classList.add('camera-active');
+                liveBtn.textContent = '\u23F9 Stop Live';
+            } else {
+                liveBtn.classList.remove('camera-active');
+                liveBtn.textContent = '\uD83C\uDFA5 Live Generate';
+            }
+        }
     }
 
     // ---- Settings tab device selector ----
@@ -481,13 +604,11 @@
         select.style.cssText = 'width: 100%; background: var(--background-fill-secondary, #1a1a2e); color: var(--body-text-color, #e0e0e0); border: 1px solid var(--border-color-primary, #444); border-radius: 6px; padding: 6px 8px; font-size: 13px;';
         select.addEventListener('change', function() {
             localStorage.setItem(PREF_DEVICE_ID, this.value);
-            // Sync overlay selector if open
             var overlaySelect = document.getElementById('camera_device_select_overlay');
             if (overlaySelect && overlaySelect.value !== this.value) {
                 overlaySelect.value = this.value;
             }
-            // Restart stream if active
-            if (mediaStream && cameraState !== 'IDLE') {
+            if (mediaStream && liveState !== 'IDLE') {
                 stopStream();
                 startStream(this.value);
             }
@@ -500,21 +621,21 @@
     // ---- Hooks ----
 
     onUiLoaded(function() {
-        // Patch cancelGenerateForever to also stop camera
         var origCancel = window.cancelGenerateForever;
         window.cancelGenerateForever = function() {
             if (typeof origCancel === 'function') origCancel();
-            if (cameraState !== 'IDLE') stopCamera();
+            if (liveState !== 'IDLE') stopLiveGenerate();
         };
 
-        // Build settings device selector
         buildSettingsDeviceSelector();
     });
 
-    // Expose for external use
+    // Expose for external use (camera_fullscreen.js depends on this API)
     window.cameraCapture = {
-        toggle: window.toggleCamera,
-        stop: stopCamera,
-        getState: function() { return cameraState; }
+        toggleTarget: window.toggleCamera,
+        toggleLive: window.toggleLiveGenerate,
+        stop: stopLiveGenerate,
+        getState: function() { return liveState; },
+        getTargets: function() { return Array.from(cameraTargets); }
     };
 })();

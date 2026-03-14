@@ -33,7 +33,7 @@ def prepare_environment():
     requirements_file = os.environ.get('REQS_FILE', "requirements_versions.txt")
 
     print(f"Python {sys.version}")
-    print(f"Fooocus version: {fooocus_version.version}")
+    print(f"FjordFooocus version: {fooocus_version.version}")
 
     if REINSTALL_ALL or not is_installed("torch") or not is_installed("torchvision"):
         run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
@@ -121,7 +121,7 @@ def download_models(default_model, previous_default_models, checkpoint_downloads
             for alternative_model_name in previous_default_models:
                 if os.path.isfile(get_file_from_folder_list(alternative_model_name, config.paths_checkpoints)):
                     print(f'You do not have [{default_model}] but you have [{alternative_model_name}].')
-                    print(f'Fooocus will use [{alternative_model_name}] to avoid downloading new models, '
+                    print(f'FjordFooocus will use [{alternative_model_name}] to avoid downloading new models, '
                           f'but you are not using the latest models.')
                     print('Use --always-download-new-model to avoid fallback and always get new models.')
                     checkpoint_downloads = {}

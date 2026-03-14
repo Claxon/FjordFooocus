@@ -201,6 +201,7 @@ path_fooocus_expansion = get_dir_or_set_default('path_fooocus_expansion', '../mo
 path_wildcards = get_dir_or_set_default('path_wildcards', '../wildcards/')
 path_safety_checker = get_dir_or_set_default('path_safety_checker', '../models/safety_checker/')
 path_sam = get_dir_or_set_default('path_sam', '../models/sam/')
+path_dwpose = get_dir_or_set_default('path_dwpose', '../models/dwpose/')
 path_outputs = get_path_output()
 
 # Dynamic per-session output routing (set by JS->Python bridge)
@@ -797,17 +798,82 @@ def add_ratio(x):
     a, b = x.replace('*', ' ').split(' ')[:2]
     a, b = int(a), int(b)
     g = math.gcd(a, b)
-    return f'{a}×{b} <span style="color: grey;"> \U00002223 {a // g}:{b // g}</span>'
+    ra, rb = a // g, b // g
+
+    # Visual rectangle proportional to aspect ratio (thumbnail-sized)
+    max_dim = 42
+    if a >= b:
+        vis_w = max_dim
+        vis_h = max(10, round(max_dim * b / a))
+    else:
+        vis_h = max_dim
+        vis_w = max(10, round(max_dim * a / b))
+
+    rect = (f'<span class="ar-rect" style="display:inline-block;width:{vis_w}px;height:{vis_h}px;'
+            f'border:2px solid rgba(140,160,200,0.5);border-radius:3px;'
+            f'vertical-align:middle;margin-right:10px;'
+            f'background:linear-gradient(135deg,rgba(80,120,200,0.18),rgba(60,100,180,0.08));'
+            f'box-shadow:inset 0 1px 2px rgba(255,255,255,0.08);"></span>')
+
+    return f'{rect}{a}\u00d7{b} <span style="color: grey;"> \U00002223 {ra}:{rb}</span>'
 
 
 default_aspect_ratio = add_ratio(default_aspect_ratio)
 available_aspect_ratios_labels = [add_ratio(x) for x in available_aspect_ratios]
 
+# Split into portrait / landscape / square for tabbed UI
+portrait_aspect_ratios_labels = [
+    l for l, r in zip(available_aspect_ratios_labels, available_aspect_ratios)
+    if int(r.split('*')[0]) <= int(r.split('*')[1])
+]
+landscape_aspect_ratios_labels = [
+    l for l, r in zip(available_aspect_ratios_labels, available_aspect_ratios)
+    if int(r.split('*')[0]) >= int(r.split('*')[1])
+]
+
+
+def generate_ar_tiles_html(labels, selected_value=None):
+    """Generate clickable tile grid HTML for aspect ratio selection."""
+    import html as _html
+    import re as _re
+    tiles = []
+    for label in labels:
+        m = _re.search(r'(\d+)\u00d7(\d+)', label)
+        if not m:
+            continue
+        w, h = int(m.group(1)), int(m.group(2))
+        g = math.gcd(w, h)
+        ra, rb = w // g, h // g
+
+        max_dim = 42
+        if w >= h:
+            vis_w = max_dim
+            vis_h = max(10, round(max_dim * h / w))
+        else:
+            vis_h = max_dim
+            vis_w = max(10, round(max_dim * w / h))
+
+        sel = ' ar-tile-selected' if label == selected_value else ''
+        encoded = _html.escape(label)
+        tiles.append(
+            f'<div class="ar-tile{sel}" data-ar-label="{encoded}" onclick="selectAspectRatio(this)">'
+            f'<div class="ar-tile-rect" style="width:{vis_w}px;height:{vis_h}px;"></div>'
+            f'<div class="ar-tile-dims">{w}\u00d7{h}</div>'
+            f'<div class="ar-tile-ratio">{ra}:{rb}</div>'
+            f'</div>'
+        )
+    return '<div class="ar-grid">' + ''.join(tiles) + '</div>'
+
+
+def save_config():
+    """Write current config_dict to disk."""
+    with open(config_path, "w", encoding="utf-8") as json_file:
+        json.dump({k: config_dict[k] for k in always_save_keys}, json_file, indent=4)
+
 
 # Only write config in the first launch.
 if not os.path.exists(config_path):
-    with open(config_path, "w", encoding="utf-8") as json_file:
-        json.dump({k: config_dict[k] for k in always_save_keys}, json_file, indent=4)
+    save_config()
 
 
 # Always write tutorials.
@@ -930,6 +996,30 @@ def downloading_controlnet_cpds():
         file_name='fooocus_xl_cpds_128.safetensors'
     )
     return os.path.join(path_controlnet, 'fooocus_xl_cpds_128.safetensors')
+
+
+def downloading_controlnet_dwpose():
+    load_file_from_url(
+        url='https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors',
+        model_dir=path_controlnet,
+        file_name='thibaud_xl_openpose.safetensors'
+    )
+    return os.path.join(path_controlnet, 'thibaud_xl_openpose.safetensors')
+
+
+def downloading_dwpose_detector():
+    load_file_from_url(
+        url='https://huggingface.co/yzd-v/DWPose/resolve/main/yolox_l.onnx',
+        model_dir=path_dwpose,
+        file_name='yolox_l.onnx'
+    )
+    load_file_from_url(
+        url='https://huggingface.co/yzd-v/DWPose/resolve/main/dw-ll_ucoco_384.onnx',
+        model_dir=path_dwpose,
+        file_name='dw-ll_ucoco_384.onnx'
+    )
+    return (os.path.join(path_dwpose, 'yolox_l.onnx'),
+            os.path.join(path_dwpose, 'dw-ll_ucoco_384.onnx'))
 
 
 def downloading_ip_adapters(v):

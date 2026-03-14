@@ -150,7 +150,7 @@ def inpaint_mode_change(mode, inpaint_engine_version):
 
 reload_javascript()
 
-title = f'Fooocus {fooocus_version.version}'
+title = f'FjordFooocus {fooocus_version.version}'
 
 if isinstance(args_manager.args.preset, str):
     title += ' ' + args_manager.args.preset
@@ -177,6 +177,7 @@ with shared.gradio_root:
                                  elem_id='final_gallery')
             delete_image_request = gr.Textbox(elem_id='delete_image_request', visible=False)
             approve_images_request = gr.Textbox(elem_id='approve_images_request', visible=False)
+            unapprove_images_request = gr.Textbox(elem_id='unapprove_images_request', visible=False)
             with gr.Row(elem_id='session_batch_nav_row'):
                 gr.HTML(elem_id='session_batch_nav', value='<div id="session_batch_nav"></div>')
             gr.HTML(elem_id='batch_prompt_display_wrap', value='<div id="batch_prompt_display"></div>')
@@ -198,8 +199,9 @@ with shared.gradio_root:
                     load_parameter_button = gr.Button(label="Load Parameters", value="Load Parameters", elem_classes='type_row', elem_id='load_parameter_button', visible=False)
                     skip_button = gr.Button(label="Skip", value="Skip", elem_classes='type_row_half', elem_id='skip_button', visible=False)
                     stop_button = gr.Button(label="Stop", value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
-                    queue_button = gr.Button(label="Queue Prompt", value="Queue Prompt", elem_classes='type_row_half', elem_id='queue_button', visible=True)
-                    save_starred_btn = gr.Button(label="Save Starred", value="\u2B50 Save Starred", elem_classes='type_row_half', elem_id='save_starred_btn', visible=True)
+                    with gr.Row():
+                        queue_button = gr.Button(label="Queue Prompt", value="Queue Prompt", elem_classes='type_row_half', elem_id='queue_button', visible=True)
+                        live_generate_button = gr.Button(label="Live", value="\U0001f3a5 Live", elem_classes='type_row_half', elem_id='live_generate_button', visible=True)
 
                     def stop_clicked(currentTask):
                         import ldm_patched.modules.model_management as model_management
@@ -217,8 +219,10 @@ with shared.gradio_root:
 
                     stop_button.click(stop_clicked, inputs=currentTask, outputs=currentTask, queue=False, show_progress=False, _js='cancelGenerateForever')
                     skip_button.click(skip_clicked, inputs=currentTask, outputs=currentTask, queue=False, show_progress=False)
+                    live_generate_button.click(fn=lambda: None, _js='() => { toggleLiveGenerate(); }', queue=False, show_progress=False)
             prompt_queue = gr.State([])
             prompt_queue_display = gr.HTML(value='', elem_id='prompt_queue_display', visible=False)
+            queue_mutation_request = gr.Textbox(visible=False, elem_id='queue_mutation_request')
             with gr.Row(elem_classes='advanced_check_row'):
                 input_image_checkbox = gr.Checkbox(label='Input Image', value=modules.config.default_image_prompt_checkbox, container=False, elem_classes='min_check')
                 enhance_checkbox = gr.Checkbox(label='Enhance', value=modules.config.default_enhance_checkbox, container=False, elem_classes='min_check')
@@ -251,7 +255,7 @@ with shared.gradio_root:
                                     ip_image = grh.Image(label='Image', source='upload', type='numpy', show_label=False, height=300, value=modules.config.default_ip_images[image_count], elem_id=f'ip_image_{image_count}')
                                     with gr.Row():
                                         ip_paste_btn = gr.Button(value='\U0001f4cb Paste', elem_classes='type_row_half')
-                                        ip_camera_btn = gr.Button(value='\U0001f4f7 Cam', elem_classes='type_row_half')
+                                        ip_camera_btn = gr.Button(value='\U0001f4f7 Cam', elem_id=f'ip_camera_btn_{image_count}', elem_classes='type_row_half')
                                     ip_paste_btn.click(fn=lambda: None, _js=f'() => {{ pasteImageFromClipboard("#ip_image_{image_count}"); }}', queue=False, show_progress=False)
                                     ip_camera_btn.click(fn=lambda: None, _js=f'() => {{ toggleCamera("#ip_image_{image_count}"); }}', queue=False, show_progress=False)
                                     ip_images.append(ip_image)
@@ -280,7 +284,7 @@ with shared.gradio_root:
                             mixing_image_prompt_and_inpaint_main = gr.Checkbox(
                                 label='Mix with Inpaint',
                                 value=False, container=False, elem_classes='min_check')
-                        gr.HTML('* \"Image Prompt\" is powered by Fooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Documentation</a>')
+                        gr.HTML('* \"Image Prompt\" is powered by FjordFooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Documentation</a>')
 
                         def ip_advance_checked(x):
                             return [gr.update(visible=x)] * len(ip_ad_cols) + \
@@ -320,7 +324,7 @@ with shared.gradio_root:
                                                                      label='Additional Prompt Quick List',
                                                                      components=[inpaint_additional_prompt],
                                                                      visible=False)
-                                gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Documentation</a>')
+                                gr.HTML('* Powered by FjordFooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Documentation</a>')
                                 example_inpaint_prompts.click(lambda x: x[0], inputs=example_inpaint_prompts, outputs=inpaint_additional_prompt, show_progress=False, queue=False)
 
                                 def toggle_eraser(is_erasing):
@@ -346,6 +350,8 @@ with shared.gradio_root:
                                 with gr.Row():
                                     mask_paste_btn = gr.Button(value='\U0001f4cb Paste Mask', elem_id='mask_paste_btn', elem_classes='type_row_half')
                                     mask_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#inpaint_mask_canvas"); }', queue=False, show_progress=False)
+                                    mask_camera_btn = gr.Button(value='\U0001f4f7 Cam', elem_id='mask_camera_btn', elem_classes='type_row_half')
+                                    mask_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#inpaint_mask_canvas"); }', queue=False, show_progress=False)
                                 invert_mask_checkbox = gr.Checkbox(label='Invert Mask When Generating', value=modules.config.default_invert_mask_checkbox)
                                 inpaint_mask_model = gr.Dropdown(label='Mask generation model',
                                                                  choices=flags.inpaint_mask_models,
@@ -370,7 +376,7 @@ with shared.gradio_root:
                                     inpaint_mask_box_threshold = gr.Slider(label="Box Threshold", minimum=0.0, maximum=1.0, value=0.3, step=0.05)
                                     inpaint_mask_text_threshold = gr.Slider(label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.05)
                                     inpaint_mask_sam_max_detections = gr.Slider(label="Maximum number of detections", info="Set to 0 to detect all", minimum=0, maximum=10, value=modules.config.default_sam_max_detections, step=1, interactive=True)
-                                generate_mask_button = gr.Button(value='Generate mask from image')
+                                generate_mask_button = gr.Button(value='Generate mask from image', elem_id='generate_mask_button')
 
                                 def generate_mask(image, mask_model, cloth_category, dino_prompt_text, sam_model, box_threshold, text_threshold, sam_max_detections, dino_erode_or_dilate, dino_debug):
                                     from extras.inpaint_mask import generate_mask_from_image
@@ -442,7 +448,7 @@ with shared.gradio_root:
 
                     with gr.Tab(label='Metadata', id='metadata_tab') as metadata_tab:
                         with gr.Column():
-                            metadata_input_image = grh.Image(label='For images created by Fooocus', source='upload', type='pil')
+                            metadata_input_image = grh.Image(label='For images created by FjordFooocus', source='upload', type='pil')
                             metadata_json = gr.JSON(label='Metadata')
                             metadata_import_button = gr.Button(value='Apply Metadata')
 
@@ -552,7 +558,7 @@ with shared.gradio_root:
                                 enhance_inpaint_engine = gr.Dropdown(label='Inpaint Engine',
                                                                      value=modules.config.default_inpaint_engine_version,
                                                                      choices=flags.inpaint_engine_versions,
-                                                                     info='Version of Fooocus inpaint model. If set, use performance Quality or Speed (no performance LoRAs) for best results.')
+                                                                     info='Version of FjordFooocus inpaint model. If set, use performance Quality or Speed (no performance LoRAs) for best results.')
                                 enhance_inpaint_strength = gr.Slider(label='Inpaint Denoising Strength',
                                                                      minimum=0.0, maximum=1.0, step=0.001,
                                                                      value=1.0,
@@ -653,16 +659,79 @@ with shared.gradio_root:
                                                  elem_classes=['performance_selection'])
 
                 with gr.Accordion(label='Aspect Ratios', open=False, elem_id='aspect_ratios_accordion') as aspect_ratios_accordion:
-                    aspect_ratios_selection = gr.Radio(label='Aspect Ratios', show_label=False,
-                                                       choices=modules.config.available_aspect_ratios_labels,
-                                                       value=modules.config.default_aspect_ratio,
-                                                       info='width × height',
-                                                       elem_classes='aspect_ratios')
+                    _default_is_portrait = modules.config.default_aspect_ratio in modules.config.portrait_aspect_ratios_labels
+                    _default_sel = modules.config.default_aspect_ratio
 
+                    with gr.Tabs(elem_id='aspect_ratio_tabs'):
+                        with gr.TabItem('Landscape', id='ar_tab_landscape'):
+                            landscape_ar_html = gr.HTML(
+                                value=modules.config.generate_ar_tiles_html(
+                                    modules.config.landscape_aspect_ratios_labels,
+                                    None if _default_is_portrait else _default_sel),
+                                elem_id='landscape_ar_grid')
+                        with gr.TabItem('Portrait', id='ar_tab_portrait'):
+                            portrait_ar_html = gr.HTML(
+                                value=modules.config.generate_ar_tiles_html(
+                                    modules.config.portrait_aspect_ratios_labels,
+                                    _default_sel if _default_is_portrait else None),
+                                elem_id='portrait_ar_grid')
+                        with gr.TabItem('Custom', id='ar_tab_custom'):
+                            with gr.Row():
+                                custom_ar_width = gr.Number(label='Width', value=1024, precision=0, minimum=64, maximum=4096)
+                                custom_ar_height = gr.Number(label='Height', value=1024, precision=0, minimum=64, maximum=4096)
+                            gr.HTML('<p style="color:grey;font-size:0.85em;margin-top:4px;">Multiples of 64 recommended for best results.</p>')
+                            with gr.Row():
+                                custom_ar_button = gr.Button('Apply Custom Size', variant='secondary', elem_id='custom_ar_apply')
+                                save_custom_ar_button = gr.Button('Save to List', variant='secondary', elem_id='save_custom_ar')
+
+                    # Hidden textbox holds the actual value for ctrls / preset sync
+                    aspect_ratios_selection = gr.Textbox(value=modules.config.default_aspect_ratio,
+                                                         visible=False, elem_id='aspect_ratio_value')
+
+                    # --- sync handlers ---
+                    def _apply_custom(w, h):
+                        w, h = max(64, int(w)), max(64, int(h))
+                        label = modules.config.add_ratio(f'{w}*{h}')
+                        return label
+
+                    def _save_custom_ar(w, h):
+                        w, h = max(64, int(w)), max(64, int(h))
+                        raw = f'{w}*{h}'
+                        label = modules.config.add_ratio(raw)
+                        if raw not in modules.config.available_aspect_ratios:
+                            modules.config.available_aspect_ratios.append(raw)
+                            modules.config.available_aspect_ratios_labels.append(label)
+                            if w < h:
+                                modules.config.portrait_aspect_ratios_labels.append(label)
+                            elif w > h:
+                                modules.config.landscape_aspect_ratios_labels.append(label)
+                            else:
+                                modules.config.portrait_aspect_ratios_labels.append(label)
+                                modules.config.landscape_aspect_ratios_labels.append(label)
+                            modules.config.config_dict['available_aspect_ratios'] = modules.config.available_aspect_ratios
+                            modules.config.save_config()
+                        # Re-generate tile grids with new item selected
+                        return (modules.config.generate_ar_tiles_html(modules.config.landscape_aspect_ratios_labels,
+                                                                      label if w >= h else None),
+                                modules.config.generate_ar_tiles_html(modules.config.portrait_aspect_ratios_labels,
+                                                                      label if w <= h else None),
+                                label)
+
+                    custom_ar_button.click(_apply_custom, inputs=[custom_ar_width, custom_ar_height],
+                                           outputs=[aspect_ratios_selection],
+                                           queue=False, show_progress=False)
+                    save_custom_ar_button.click(_save_custom_ar, inputs=[custom_ar_width, custom_ar_height],
+                                                outputs=[landscape_ar_html, portrait_ar_html, aspect_ratios_selection],
+                                                queue=False, show_progress=False)
+
+                    # Update accordion label + tile highlight when value changes (preset load, custom apply, etc.)
                     aspect_ratios_selection.change(lambda x: None, inputs=aspect_ratios_selection, queue=False, show_progress=False, _js='(x)=>{refresh_aspect_ratios_label(x);}')
                     shared.gradio_root.load(lambda x: None, inputs=aspect_ratios_selection, queue=False, show_progress=False, _js='(x)=>{refresh_aspect_ratios_label(x);}')
 
-                image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
+                with gr.Row():
+                    image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
+                    image_number_max = gr.Number(label='Max', value=modules.config.default_max_image_number, precision=0, minimum=1, elem_classes='image_number_max')
+                image_number_max.change(lambda m: gr.update(maximum=int(m)), inputs=image_number_max, outputs=image_number, queue=False, show_progress=False)
 
                 output_format = gr.Radio(label='Output Format',
                                          choices=flags.OutputFormat.list(),
@@ -796,7 +865,7 @@ with shared.gradio_root:
 
                         adaptive_cfg = gr.Slider(label='CFG Mimicking from TSNR', minimum=1.0, maximum=30.0, step=0.01,
                                                  value=modules.config.default_cfg_tsnr,
-                                                 info='Enabling Fooocus\'s implementation of CFG mimicking for TSNR '
+                                                 info='Enabling FjordFooocus\'s implementation of CFG mimicking for TSNR '
                                                       '(effective when real CFG > mimicked CFG).')
                         clip_skip = gr.Slider(label='CLIP Skip', minimum=1, maximum=flags.clip_skip_max, step=1,
                                                  value=modules.config.default_clip_skip,
@@ -901,7 +970,7 @@ with shared.gradio_root:
                         inpaint_engine = gr.Dropdown(label='Inpaint Engine',
                                                      value=modules.config.default_inpaint_engine_version,
                                                      choices=flags.inpaint_engine_versions,
-                                                     info='Version of Fooocus inpaint model. If set, use performance Quality or Speed (no performance LoRAs) for best results.')
+                                                     info='Version of FjordFooocus inpaint model. If set, use performance Quality or Speed (no performance LoRAs) for best results.')
                         inpaint_strength = gr.Slider(label='Inpaint Denoising Strength',
                                                      minimum=0.0, maximum=1.0, step=0.001, value=1.0,
                                                      info='Same as the denoising strength in A1111 inpaint. '
@@ -1089,16 +1158,63 @@ with shared.gradio_root:
         topic_input.change(handle_topic_change, inputs=[topic_input], queue=False, show_progress=False)
         approve_images_request.input(handle_approve_images, inputs=[approve_images_request], outputs=[approve_images_request], queue=False, show_progress=False)
 
+        def handle_unapprove_images(paths_text):
+            import re
+            from urllib.parse import unquote
+            if not paths_text or paths_text.strip() == '':
+                return gr.update(value='')
+            outputs_path = os.path.abspath(modules.config.path_outputs)
+            count = 0
+            for line in paths_text.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                match = re.search(r'/file[=/](.+?)(?:\?|$)', line)
+                extracted = unquote(match.group(1)) if match else line
+                extracted = os.path.abspath(extracted)
+                # Find the approved path from the source path
+                real_path = None
+                if extracted.startswith(outputs_path) and os.path.exists(extracted):
+                    real_path = extracted
+                else:
+                    filename = os.path.basename(extracted)
+                    temp_base = os.path.join(outputs_path, 'TEMPORARY')
+                    for root, dirs, files in os.walk(temp_base):
+                        if filename in files:
+                            real_path = os.path.join(root, filename)
+                            break
+                if real_path:
+                    approved_path = modules.config.get_approved_output_path(real_path)
+                    if approved_path and os.path.exists(approved_path):
+                        os.remove(approved_path)
+                        print(f'Unapproved: {approved_path}')
+                        count += 1
+            print(f'Unapproved {count} image(s)')
+            return gr.update(value='')
+
+        unapprove_images_request.input(handle_unapprove_images, inputs=[unapprove_images_request], outputs=[unapprove_images_request], queue=False, show_progress=False)
+
         def format_queue_html(q):
+            import html as _html
             if not q:
                 return gr.update(visible=False, value='')
-            items = ''.join(
-                f'<div style="padding:4px 8px;margin:2px 0;background:var(--background-fill-secondary);'
-                f'border-radius:4px;font-size:0.85em;">'
-                f'{i+1}. {p[:80]}{"..." if len(p) > 80 else ""}</div>'
-                for i, p in enumerate(q))
-            return gr.update(visible=True,
-                value=f'<div style="max-height:120px;overflow-y:auto;"><b>Queue ({len(q)}):</b>{items}</div>')
+            items = []
+            for i, p in enumerate(q):
+                truncated = _html.escape(p[:80] + ('...' if len(p) > 80 else ''))
+                is_next = (i == 0)
+                items.append(
+                    f'<div class="queue-item{" queue-item-next" if is_next else ""}" draggable="true" data-queue-index="{i}">'
+                    f'<span class="queue-drag-handle" title="Drag to reorder">&#x2630;</span>'
+                    f'<span class="queue-badge">{i+1}</span>'
+                    f'<span class="queue-text">{truncated}</span>'
+                    f'<button class="queue-remove-btn" onclick="removeQueueItem({i})" title="Remove">&times;</button>'
+                    f'</div>'
+                )
+            html = (f'<div class="queue-container" id="queue_container">'
+                    f'<div class="queue-header">Queue ({len(q)})</div>'
+                    + ''.join(items) +
+                    f'</div>')
+            return gr.update(visible=True, value=html)
 
         def add_to_queue(current_queue, prompt_text):
             if not prompt_text or prompt_text.strip() == '':
@@ -1113,13 +1229,42 @@ with shared.gradio_root:
             next_prompt = current_queue[0]
             return new_queue, next_prompt, format_queue_html(new_queue)
 
+        def handle_queue_mutation(current_queue, mutation_str):
+            if not mutation_str or mutation_str.strip() == '':
+                return current_queue, format_queue_html(current_queue), gr.update(value='')
+            parts = mutation_str.strip().split(':', 1)
+            action = parts[0]
+            if action == 'remove' and len(parts) > 1:
+                try:
+                    idx = int(parts[1])
+                    if 0 <= idx < len(current_queue):
+                        new_queue = current_queue[:idx] + current_queue[idx+1:]
+                        return new_queue, format_queue_html(new_queue), gr.update(value='')
+                except ValueError:
+                    pass
+            elif action == 'reorder' and len(parts) > 1:
+                try:
+                    indices = [int(x) for x in parts[1].split(',')]
+                    if len(indices) == len(current_queue) and sorted(indices) == list(range(len(current_queue))):
+                        new_queue = [current_queue[i] for i in indices]
+                        return new_queue, format_queue_html(new_queue), gr.update(value='')
+                except (ValueError, IndexError):
+                    pass
+            return current_queue, format_queue_html(current_queue), gr.update(value='')
+
+        queue_mutation_request.input(
+            handle_queue_mutation,
+            inputs=[prompt_queue, queue_mutation_request],
+            outputs=[prompt_queue, prompt_queue_display, queue_mutation_request],
+            queue=False, show_progress=False)
+
         queue_button.click(
             add_to_queue, inputs=[prompt_queue, prompt],
             outputs=[prompt_queue, prompt_queue_display],
-            queue=False, show_progress=False)
-
-        save_starred_btn.click(fn=lambda: None, inputs=[], outputs=[], queue=False, show_progress=False,
-                               _js='() => { if (window.sessionGallery && window.sessionGallery.approveStarredImages) window.sessionGallery.approveStarredImages(); }')
+            queue=False, show_progress=False) \
+            .then(fn=lambda: None,
+                  _js='() => { let b = document.querySelector("#generate_button"); if(b && b.offsetParent !== null) b.click(); }',
+                  queue=False, show_progress=False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, style_selections,
                              performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,
@@ -1129,6 +1274,8 @@ with shared.gradio_root:
                              seed_random, image_seed, inpaint_engine, inpaint_engine_state,
                              inpaint_mode] + enhance_inpaint_mode_ctrls + [generate_button,
                              load_parameter_button] + freeu_ctrls + lora_ctrls
+
+
 
         if not args_manager.args.disable_preset_selection:
             def preset_selection_change(preset, is_generating, inpaint_mode):
@@ -1168,7 +1315,7 @@ with shared.gradio_root:
             preset_selection.change(preset_selection_change, inputs=[preset_selection, state_is_generating, inpaint_mode], outputs=load_data_outputs, queue=False, show_progress=True) \
                 .then(fn=style_sorter.sort_styles, inputs=style_selections, outputs=style_selections, queue=False, show_progress=False) \
                 .then(lambda: None, _js='()=>{refresh_style_localization();}') \
-                .then(inpaint_engine_state_change, inputs=[inpaint_engine_state] + enhance_inpaint_mode_ctrls, outputs=enhance_inpaint_engine_ctrls, queue=False, show_progress=False)
+                .then(inpaint_engine_state_change, inputs=[inpaint_engine_state] + enhance_inpaint_mode_ctrls, outputs=enhance_inpaint_engine_ctrls, queue=False, show_progress=False) \
 
         performance_selection.change(lambda x: [gr.update(interactive=not flags.Performance.has_restricted_features(x))] * 11 +
                                                [gr.update(visible=not flags.Performance.has_restricted_features(x))] * 1 +

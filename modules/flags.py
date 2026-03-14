@@ -76,12 +76,14 @@ cn_ip = "ImagePrompt"
 cn_ip_face = "FaceSwap"
 cn_canny = "PyraCanny"
 cn_cpds = "CPDS"
+cn_dwpose = "Skeletal Pose"
 
-ip_list = [cn_ip, cn_canny, cn_cpds, cn_ip_face]
+ip_list = [cn_ip, cn_canny, cn_cpds, cn_dwpose, cn_ip_face]
 default_ip = cn_ip
 
 default_parameters = {
-    cn_ip: (0.5, 0.6), cn_ip_face: (0.9, 0.75), cn_canny: (0.5, 1.0), cn_cpds: (0.5, 1.0)
+    cn_ip: (0.5, 0.6), cn_ip_face: (0.9, 0.75), cn_canny: (0.5, 1.0), cn_cpds: (0.5, 1.0),
+    cn_dwpose: (0.5, 1.0)
 }  # stop, weight
 
 output_formats = ['png', 'jpeg', 'webp']
@@ -101,9 +103,9 @@ describe_type_anime = 'Art/Anime'
 describe_types = [describe_type_photo, describe_type_anime]
 
 sdxl_aspect_ratios = [
-    '704*1408', '704*1344', '768*1344', '768*1280', '832*1216', '832*1152',
+    '704*1408', '704*1344', '720*1280', '768*1344', '768*1280', '832*1216', '832*1152',
     '896*1152', '896*1088', '960*1088', '960*1024', '1024*1024', '1024*960',
-    '1088*960', '1088*896', '1152*896', '1152*832', '1216*832', '1280*768',
+    '1088*960', '1088*896', '1152*896', '1152*832', '1216*832', '1280*720', '1280*768',
     '1344*768', '1344*704', '1408*704', '1472*704', '1536*640', '1600*640',
     '1664*576', '1728*576'
 ]

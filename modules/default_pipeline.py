@@ -464,7 +464,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             previewer_end=steps,
             disable_preview=disable_preview
         )
-        print('Fooocus VAE-based swap.')
+        print('FjordFooocus VAE-based swap.')
 
         target_model = target_refiner_unet
         if target_model is None:

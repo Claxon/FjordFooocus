@@ -81,12 +81,31 @@ function refresh_style_localization() {
 }
 
 function refresh_aspect_ratios_label(value) {
-    label = document.querySelector('#aspect_ratios_accordion div span');
-    translation = getTranslation("Aspect Ratios");
+    var label = document.querySelector('#aspect_ratios_accordion div span');
+    var translation = getTranslation("Aspect Ratios");
     if (typeof translation == "undefined") {
         translation = "Aspect Ratios";
     }
     label.textContent = translation + " " + htmlDecode(value);
+
+    // Sync tile selection to match the current value
+    document.querySelectorAll('.ar-tile-selected').forEach(function(t) { t.classList.remove('ar-tile-selected'); });
+    document.querySelectorAll('.ar-tile').forEach(function(t) {
+        if (t.dataset.arLabel === value) t.classList.add('ar-tile-selected');
+    });
+}
+
+function selectAspectRatio(tile) {
+    var label = tile.dataset.arLabel;
+    var el = document.querySelector('#aspect_ratio_value textarea') ||
+             document.querySelector('#aspect_ratio_value input');
+    if (el) {
+        el.value = label;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    // Update visual selection across all grids
+    document.querySelectorAll('.ar-tile-selected').forEach(function(t) { t.classList.remove('ar-tile-selected'); });
+    tile.classList.add('ar-tile-selected');
 }
 
 function localizeWholePage() {

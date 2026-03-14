@@ -79,3 +79,9 @@ def cpds(x):
     result = density + offset
 
     return norm255(result, low=4, high=96).clip(0, 255).astype(np.uint8)
+
+
+def dwpose(x):
+    """DWPose skeleton detection preprocessor."""
+    import extras.dwpose as dwpose_module
+    return dwpose_module.detect_and_draw(x)
