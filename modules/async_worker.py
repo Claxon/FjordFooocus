@@ -160,6 +160,15 @@ class AsyncTask:
         self.images_to_enhance_count = 0
         self.enhance_stats = {}
 
+        self.removebg_input_image = args.pop()
+        self.removebg_mask_model = args.pop()
+        self.removebg_cloth_category = args.pop()
+        self.removebg_dino_prompt = args.pop()
+        self.removebg_sam_model = args.pop()
+        self.removebg_box_threshold = args.pop()
+        self.removebg_text_threshold = args.pop()
+        self.removebg_sam_max_detections = args.pop()
+
 async_tasks = []
 
 
@@ -1161,6 +1170,61 @@ def worker():
         goals = []
         tasks = []
         current_progress = 1
+
+        if async_task.input_image_checkbox and async_task.current_tab == 'removebg' and async_task.removebg_input_image is not None:
+            from PIL import Image
+            from modules.util import generate_temp_filename
+
+            progressbar(async_task, 1, 'Generating mask for background removal ...')
+            image = HWC3(async_task.removebg_input_image)
+
+            extras_opts = {}
+            sam_options = None
+            mask_model = async_task.removebg_mask_model
+
+            if mask_model == 'u2net_cloth_seg':
+                extras_opts['cloth_category'] = async_task.removebg_cloth_category
+            elif mask_model == 'sam':
+                sam_options = SAMOptions(
+                    dino_prompt=async_task.removebg_dino_prompt,
+                    dino_box_threshold=async_task.removebg_box_threshold,
+                    dino_text_threshold=async_task.removebg_text_threshold,
+                    max_detections=int(async_task.removebg_sam_max_detections),
+                    model_type=async_task.removebg_sam_model
+                )
+
+            progressbar(async_task, 10, 'Running background detection model ...')
+            mask, _, _, _ = generate_mask_from_image(image, mask_model, extras_opts, sam_options)
+
+            if mask is not None:
+                if mask.ndim == 3:
+                    alpha = np.mean(mask, axis=2).astype(np.uint8)
+                else:
+                    alpha = mask.astype(np.uint8)
+
+                H, W = image.shape[:2]
+                if alpha.shape[:2] != (H, W):
+                    alpha = resample_image(
+                        alpha[:, :, np.newaxis] if alpha.ndim == 2 else alpha,
+                        width=W, height=H)
+                    if alpha.ndim == 3:
+                        alpha = np.mean(alpha, axis=2).astype(np.uint8)
+
+                rgba = np.dstack((image[:, :, :3], alpha))
+
+                progressbar(async_task, 90, 'Saving result ...')
+                pil_img = Image.fromarray(rgba, 'RGBA')
+                output_path = modules.config.get_effective_output_path()
+                _, local_temp_filename, _ = generate_temp_filename(folder=output_path, extension='png')
+                os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
+                pil_img.save(local_temp_filename)
+
+                async_task.results.append(local_temp_filename)
+                async_task.yields.append(['results', async_task.results])
+
+            progressbar(async_task, 100, 'Background removal complete.')
+            async_task.processing = False
+            return
 
         if async_task.input_image_checkbox:
             base_model_additional_loras, clip_vision_path, controlnet_canny_path, controlnet_cpds_path, controlnet_dwpose_path, inpaint_head_model_path, inpaint_image, inpaint_mask, ip_adapter_face_path, ip_adapter_path, ip_negative_path, skip_prompt_processing, use_synthetic_refiner = apply_image_input(

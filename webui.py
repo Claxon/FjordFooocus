@@ -446,6 +446,51 @@ with shared.gradio_root:
                                 enhance_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#enhance_input_image"); }', queue=False, show_progress=False)
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/3281" target="_blank">\U0001F4D4 Documentation</a>')
 
+                    with gr.Tab(label='Remove Background', id='removebg_tab') as removebg_tab:
+                        with gr.Row():
+                            with gr.Column():
+                                removebg_input_image = grh.Image(label='Upload image to remove background', source='upload', type='numpy', elem_id='removebg_input_image', show_label=False)
+                                with gr.Row():
+                                    removebg_paste_btn = gr.Button(value='\U0001f4cb Paste Image', elem_classes='type_row_half')
+                                    removebg_camera_btn = gr.Button(value='\U0001f4f7 Camera', elem_classes='type_row_half')
+                                removebg_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#removebg_input_image"); }', queue=False, show_progress=False)
+                                removebg_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#removebg_input_image"); }', queue=False, show_progress=False)
+                            with gr.Column():
+                                removebg_mask_model = gr.Dropdown(label='Mask generation model',
+                                                                  choices=flags.inpaint_mask_models,
+                                                                  value='isnet-general-use')
+                                removebg_cloth_category = gr.Dropdown(label='Cloth category',
+                                                                      choices=flags.inpaint_mask_cloth_category,
+                                                                      value=modules.config.default_inpaint_mask_cloth_category,
+                                                                      visible=False)
+                                removebg_dino_prompt = gr.Textbox(label='Detection prompt', value='', visible=False, info='Use singular whenever possible', placeholder='Describe what to keep (e.g. person, cat, car)')
+                                removebg_example_prompts = gr.Dataset(
+                                    samples=modules.config.example_enhance_detection_prompts,
+                                    label='Detection Prompt Quick List',
+                                    components=[removebg_dino_prompt],
+                                    visible=False)
+                                removebg_example_prompts.click(lambda x: x[0],
+                                                               inputs=removebg_example_prompts,
+                                                               outputs=removebg_dino_prompt,
+                                                               show_progress=False, queue=False)
+                                with gr.Accordion("Advanced options", visible=False, open=False) as removebg_advanced_options:
+                                    removebg_sam_model = gr.Dropdown(label='SAM model', choices=flags.inpaint_mask_sam_model, value=modules.config.default_inpaint_mask_sam_model)
+                                    removebg_box_threshold = gr.Slider(label="Box Threshold", minimum=0.0, maximum=1.0, value=0.3, step=0.05)
+                                    removebg_text_threshold = gr.Slider(label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.05)
+                                    removebg_sam_max_detections = gr.Slider(label="Maximum number of detections", info="Set to 0 to detect all", minimum=0, maximum=10, value=0, step=1, interactive=True)
+                                gr.HTML('* Output is saved as PNG with transparent background. Uses the same mask models as Inpaint advanced masking.')
+
+                                removebg_mask_model.change(lambda x: [gr.update(visible=x == 'u2net_cloth_seg')] +
+                                                                      [gr.update(visible=x == 'sam')] * 2 +
+                                                                      [gr.Dataset.update(visible=x == 'sam',
+                                                                                         samples=modules.config.example_enhance_detection_prompts)],
+                                                           inputs=removebg_mask_model,
+                                                           outputs=[removebg_cloth_category,
+                                                                    removebg_dino_prompt,
+                                                                    removebg_advanced_options,
+                                                                    removebg_example_prompts],
+                                                           queue=False, show_progress=False)
+
                     with gr.Tab(label='Metadata', id='metadata_tab') as metadata_tab:
                         with gr.Column():
                             metadata_input_image = grh.Image(label='For images created by FjordFooocus', source='upload', type='pil')
@@ -638,6 +683,7 @@ with shared.gradio_root:
             ip_tab.select(lambda: 'ip', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             describe_tab.select(lambda: 'desc', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             enhance_tab.select(lambda: 'enhance', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
+            removebg_tab.select(lambda: 'removebg', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             metadata_tab.select(lambda: 'metadata', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             enhance_checkbox.change(lambda x: gr.update(visible=x), inputs=enhance_checkbox,
                                         outputs=enhance_input_panel, queue=False, show_progress=False, _js=switch_js)
@@ -1386,6 +1432,9 @@ with shared.gradio_root:
                   enhance_input_image, enhance_checkbox, enhance_uov_method, enhance_uov_processing_order,
                   enhance_uov_prompt_type]
         ctrls += enhance_ctrls
+        ctrls += [removebg_input_image, removebg_mask_model, removebg_cloth_category,
+                  removebg_dino_prompt, removebg_sam_model, removebg_box_threshold,
+                  removebg_text_threshold, removebg_sam_max_detections]
 
         def parse_meta(raw_prompt_txt, is_generating):
             loaded_json = None
