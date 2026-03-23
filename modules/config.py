@@ -209,11 +209,13 @@ active_profile = 'default'
 active_topic = ''
 
 
-def get_effective_output_path():
+def get_effective_output_path(profile=None, topic=None):
     from modules.util import sanitize_name
-    profile_slug = sanitize_name(active_profile)
-    if active_topic and active_topic.strip():
-        topic_slug = sanitize_name(active_topic)
+    # Prefer explicit per-task values; fall back to globals only when called outside a task context
+    profile_slug = sanitize_name((profile if profile is not None else active_profile) or 'anonymous')
+    topic_val = topic if topic is not None else active_topic
+    if topic_val and topic_val.strip():
+        topic_slug = sanitize_name(topic_val)
         return os.path.join(path_outputs, 'TEMPORARY', profile_slug, topic_slug)
     else:
         return os.path.join(path_outputs, 'TEMPORARY', profile_slug, 'other')

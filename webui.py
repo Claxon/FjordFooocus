@@ -178,6 +178,10 @@ with shared.gradio_root:
             delete_image_request = gr.Textbox(elem_id='delete_image_request', visible=False)
             approve_images_request = gr.Textbox(elem_id='approve_images_request', visible=False)
             unapprove_images_request = gr.Textbox(elem_id='unapprove_images_request', visible=False)
+            layer_editor_command = gr.Textbox(elem_id='layer_editor_command', visible=False)
+            layer_editor_result = gr.Textbox(elem_id='layer_editor_result', visible=False)
+            with gr.Row(elem_id='layer_editor_toggle_row'):
+                layer_editor_toggle = gr.Button(value='\U0001f3a8 Layer Editor', elem_id='layer_editor_toggle', elem_classes='type_row_half')
             with gr.Row(elem_id='session_batch_nav_row'):
                 gr.HTML(elem_id='session_batch_nav', value='<div id="session_batch_nav"></div>')
             gr.HTML(elem_id='batch_prompt_display_wrap', value='<div id="batch_prompt_display"></div>')
@@ -239,7 +243,7 @@ with shared.gradio_root:
                                 uov_paste_btn.click(fn=lambda: None, _js='() => { pasteImageFromClipboard("#uov_input_image"); }', queue=False, show_progress=False)
                                 uov_camera_btn.click(fn=lambda: None, _js='() => { toggleCamera("#uov_input_image"); }', queue=False, show_progress=False)
                             with gr.Column():
-                                uov_method = gr.Radio(label='Upscale or Variation:', choices=flags.uov_list, value=modules.config.default_uov_method)
+                                uov_method = gr.Radio(label='Upscale or Variation:', choices=flags.uov_list, value=modules.config.default_uov_method, elem_id='uov_method')
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Documentation</a>')
                     with gr.Tab(label='Image Prompt', id='ip_tab') as ip_tab:
                         with gr.Row():
@@ -677,7 +681,7 @@ with shared.gradio_root:
                                         outputs=image_input_panel, queue=False, show_progress=False, _js=switch_js)
             ip_advanced.change(lambda: None, queue=False, show_progress=False, _js=down_js)
 
-            current_tab = gr.Textbox(value='uov', visible=False)
+            current_tab = gr.Textbox(value='uov', visible=False, elem_id='current_tab')
             uov_tab.select(lambda: 'uov', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             inpaint_tab.select(lambda: 'inpaint', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
             ip_tab.select(lambda: 'ip', outputs=current_tab, queue=False, _js=down_js, show_progress=False)
@@ -690,7 +694,7 @@ with shared.gradio_root:
 
         with gr.Column(scale=1, visible=modules.config.default_advanced_checkbox) as advanced_column:
             with gr.Tab(label='Settings'):
-                profile_input = gr.Textbox(label='Profile', value='default', placeholder='default',
+                profile_input = gr.Textbox(label='Profile', value='', placeholder='Enter your name…',
                                            elem_id='profile_input', lines=1, max_lines=1)
 
                 if not args_manager.args.disable_preset_selection:
@@ -808,14 +812,14 @@ with shared.gradio_root:
                 seed_random.change(random_checked, inputs=[seed_random], outputs=[image_seed],
                                    queue=False, show_progress=False)
 
-                def update_history_link():
+                def update_history_link(profile=''):
                     if args_manager.args.disable_image_log:
                         return gr.update(value='')
-
-                    return gr.update(value=f'<a href="file={get_current_html_path(output_format)}" target="_blank">\U0001F4DA History Log</a>')
+                    p = (profile or '').strip() or 'anonymous'
+                    return gr.update(value=f'<a href="file={get_current_html_path(profile=p)}" target="_blank">\U0001F4DA History Log</a>')
 
                 history_link = gr.HTML()
-                shared.gradio_root.load(update_history_link, outputs=history_link, queue=False, show_progress=False)
+                shared.gradio_root.load(update_history_link, inputs=[profile_input], outputs=history_link, queue=False, show_progress=False)
 
                 gr.HTML(value='<div id="camera_device_settings"></div>')
 
@@ -1019,6 +1023,7 @@ with shared.gradio_root:
                                                      info='Version of FjordFooocus inpaint model. If set, use performance Quality or Speed (no performance LoRAs) for best results.')
                         inpaint_strength = gr.Slider(label='Inpaint Denoising Strength',
                                                      minimum=0.0, maximum=1.0, step=0.001, value=1.0,
+                                                     elem_id='inpaint_strength',
                                                      info='Same as the denoising strength in A1111 inpaint. '
                                                           'Only used in inpaint, not used in outpaint. '
                                                           '(Outpaint always use 1.0)')
@@ -1149,12 +1154,12 @@ with shared.gradio_root:
             queue=False, show_progress=False)
 
         def handle_profile_change(profile_name):
-            modules.config.active_profile = profile_name.strip() if profile_name else 'default'
-            print(f'Profile set to: {modules.config.active_profile}')
+            # Profile is now per-task via ctrls — no global state needed
+            pass
 
         def handle_topic_change(topic_name):
-            modules.config.active_topic = topic_name.strip() if topic_name else ''
-            print(f'Topic set to: {modules.config.active_topic or "(none)"}')
+            # Topic is now per-task via ctrls — no global state needed
+            pass
 
 
         def handle_approve_images(paths_text):
@@ -1239,6 +1244,336 @@ with shared.gradio_root:
             return gr.update(value='')
 
         unapprove_images_request.input(handle_unapprove_images, inputs=[unapprove_images_request], outputs=[unapprove_images_request], queue=False, show_progress=False)
+
+        def handle_layer_editor_command(command_json):
+            """Handle commands from the Layer Editor JS overlay.
+
+            Supported actions:
+            - save_project: Package layers into a .fjord ZIP file
+            - load_project: Unpack .fjord or import .psd file
+            - describe: Run image description on a layer
+            - removebg: Remove background from a layer image
+            - set_inpaint: Set inpaint source image and mask via server-side
+              (bypasses sketch component's DOM which is unreliable for re-injection)
+            """
+            NO_INPAINT = gr.update(), gr.update()  # Don't touch inpaint components
+            if not command_json or command_json.strip() == '':
+                return gr.update(value=''), gr.update(value=''), *NO_INPAINT
+
+            try:
+                cmd = json.loads(command_json)
+            except json.JSONDecodeError:
+                print(f'[Layer Editor] Invalid JSON command: {command_json}')
+                return gr.update(value=''), gr.update(value=''), *NO_INPAINT
+
+            action = cmd.get('action', '')
+
+            if action == 'save_project':
+                return (*_le_save_project(cmd), *NO_INPAINT)
+            elif action == 'load_project':
+                return (*_le_load_project(cmd), *NO_INPAINT)
+            elif action == 'describe':
+                return (*_le_describe(cmd), *NO_INPAINT)
+            elif action == 'removebg':
+                return (*_le_removebg(cmd), *NO_INPAINT)
+            elif action == 'set_inpaint':
+                return _le_set_inpaint(cmd)
+            else:
+                print(f'[Layer Editor] Unknown action: {action}')
+                return gr.update(value=''), gr.update(value=''), *NO_INPAINT
+
+        def _le_save_project(cmd):
+            import zipfile
+            from modules.util import generate_temp_filename
+
+            layers_data = cmd.get('layers', [])
+            doc_width = cmd.get('documentWidth', 1024)
+            doc_height = cmd.get('documentHeight', 1024)
+
+            date_str, zip_path, _ = generate_temp_filename(
+                folder=modules.config.path_outputs, extension='fjord')
+            os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+
+            project_meta = {
+                'version': 1,
+                'documentWidth': doc_width,
+                'documentHeight': doc_height,
+                'layers': []
+            }
+
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for i, layer in enumerate(layers_data):
+                    image_path = layer.get('image_path', '')
+                    layer_meta = {
+                        'name': layer.get('name', f'Layer {i}'),
+                        'visible': layer.get('visible', True),
+                        'locked': layer.get('locked', False),
+                        'blendMode': layer.get('blendMode', 'source-over'),
+                        'opacity': layer.get('opacity', 1.0),
+                        'x': layer.get('x', 0),
+                        'y': layer.get('y', 0),
+                        'scaleX': layer.get('scaleX', 1.0),
+                        'scaleY': layer.get('scaleY', 1.0),
+                        'rotation': layer.get('rotation', 0),
+                        'width': layer.get('width', 0),
+                        'height': layer.get('height', 0),
+                        'file': f'layers/{i}.png'
+                    }
+                    project_meta['layers'].append(layer_meta)
+
+                    if image_path and os.path.exists(image_path):
+                        zf.write(image_path, f'layers/{i}.png')
+
+                zf.writestr('project.json', json.dumps(project_meta, indent=2))
+
+            result = json.dumps({
+                'action': 'project_saved',
+                'path': zip_path,
+                'download_url': f'/file={zip_path}'
+            })
+            print(f'[Layer Editor] Project saved: {zip_path}')
+            return gr.update(value=''), gr.update(value=result)
+
+        def _le_load_project(cmd):
+            file_path = cmd.get('file_path', '')
+            if not file_path or not os.path.exists(file_path):
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'load_error', 'error': 'File not found'}))
+
+            try:
+                if file_path.lower().endswith('.psd'):
+                    return _le_load_psd(file_path)
+                elif file_path.lower().endswith('.fjord'):
+                    return _le_load_fjord(file_path)
+                else:
+                    return gr.update(value=''), gr.update(value=json.dumps({'action': 'load_error', 'error': 'Unsupported file format'}))
+            except Exception as e:
+                print(f'[Layer Editor] Error loading project: {e}')
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'load_error', 'error': str(e)}))
+
+        def _le_load_fjord(file_path):
+            import zipfile
+            extract_dir = os.path.join(modules.config.temp_path, f'le_project_{int(time.time()*1000)}')
+            os.makedirs(extract_dir, exist_ok=True)
+
+            with zipfile.ZipFile(file_path, 'r') as zf:
+                zf.extractall(extract_dir)
+
+            project_json_path = os.path.join(extract_dir, 'project.json')
+            if not os.path.exists(project_json_path):
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'load_error', 'error': 'Invalid .fjord file: no project.json'}))
+
+            with open(project_json_path, 'r', encoding='utf-8') as f:
+                project_meta = json.load(f)
+
+            for layer in project_meta.get('layers', []):
+                layer_file = layer.get('file', '')
+                layer_abs = os.path.join(extract_dir, layer_file)
+                if os.path.exists(layer_abs):
+                    layer['image_url'] = f'/file={layer_abs}'
+                else:
+                    layer['image_url'] = ''
+
+            result = json.dumps({
+                'action': 'project_loaded',
+                'project': project_meta
+            })
+            print(f'[Layer Editor] Project loaded: {file_path}')
+            return gr.update(value=''), gr.update(value=result)
+
+        def _le_load_psd(file_path):
+            from psd_tools import PSDImage
+            psd = PSDImage.open(file_path)
+
+            extract_dir = os.path.join(modules.config.temp_path, f'le_psd_{int(time.time()*1000)}')
+            os.makedirs(extract_dir, exist_ok=True)
+
+            blend_mode_map = {
+                'normal': 'source-over',
+                'multiply': 'multiply',
+                'screen': 'screen',
+                'overlay': 'overlay',
+                'darken': 'darken',
+                'lighten': 'lighten',
+                'color_dodge': 'color-dodge',
+                'color_burn': 'color-burn',
+                'hard_light': 'hard-light',
+                'soft_light': 'soft-light',
+                'difference': 'difference',
+                'exclusion': 'exclusion',
+            }
+
+            project_meta = {
+                'version': 1,
+                'documentWidth': psd.width,
+                'documentHeight': psd.height,
+                'layers': []
+            }
+
+            for i, layer in enumerate(psd):
+                if not hasattr(layer, 'composite') or layer.is_group():
+                    continue
+
+                try:
+                    layer_image = layer.composite()
+                    layer_path = os.path.join(extract_dir, f'{i}.png')
+                    layer_image.save(layer_path)
+
+                    blend_str = str(layer.blend_mode.name if hasattr(layer.blend_mode, 'name') else layer.blend_mode).lower()
+                    canvas_blend = blend_mode_map.get(blend_str, 'source-over')
+
+                    layer_meta = {
+                        'name': layer.name or f'Layer {i}',
+                        'visible': layer.visible,
+                        'locked': False,
+                        'blendMode': canvas_blend,
+                        'opacity': layer.opacity / 255.0,
+                        'x': layer.left,
+                        'y': layer.top,
+                        'scaleX': 1.0,
+                        'scaleY': 1.0,
+                        'rotation': 0,
+                        'width': layer.width,
+                        'height': layer.height,
+                        'image_url': f'/file={layer_path}'
+                    }
+                    project_meta['layers'].append(layer_meta)
+                except Exception as e:
+                    print(f'[Layer Editor] Skipping PSD layer {i} ({layer.name}): {e}')
+                    continue
+
+            result = json.dumps({
+                'action': 'project_loaded',
+                'project': project_meta
+            })
+            print(f'[Layer Editor] PSD imported: {file_path} ({len(project_meta["layers"])} layers)')
+            return gr.update(value=''), gr.update(value=result)
+
+        def _le_describe(cmd):
+            image_path = cmd.get('image_path', '')
+            if not image_path or not os.path.exists(image_path):
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'describe_result', 'error': 'No image'}))
+
+            from PIL import Image as PILImage
+            img = PILImage.open(image_path)
+
+            describe_prompts = []
+            try:
+                from extras.interrogate import default_interrogator as default_interrogator_photo
+                describe_prompts.append(default_interrogator_photo(img))
+            except Exception as e:
+                print(f'[Layer Editor] Photo describe error: {e}')
+
+            try:
+                from extras.wd14tagger import default_interrogator as default_interrogator_anime
+                describe_prompts.append(default_interrogator_anime(img))
+            except Exception as e:
+                print(f'[Layer Editor] Anime describe error: {e}')
+
+            result_text = ', '.join(describe_prompts) if describe_prompts else 'Could not describe image.'
+            result = json.dumps({
+                'action': 'describe_result',
+                'description': result_text
+            })
+            return gr.update(value=''), gr.update(value=result)
+
+        def _le_removebg(cmd):
+            image_path = cmd.get('image_path', '')
+            mask_model = cmd.get('mask_model', 'isnet-general-use')
+            if not image_path or not os.path.exists(image_path):
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'removebg_result', 'error': 'No image'}))
+
+            import numpy as np
+            from PIL import Image as PILImage
+            from extras.inpaint_mask import generate_mask_from_image
+            from modules.util import generate_temp_filename
+
+            img = PILImage.open(image_path).convert('RGB')
+            img_np = np.array(img)
+
+            extras = {}
+            sam_options = None
+            if mask_model == 'u2net_cloth_seg':
+                cloth_cat = cmd.get('cloth_category', 'full')
+                extras['cloth_category'] = cloth_cat
+            elif mask_model == 'sam':
+                sam_options = SAMOptions(
+                    dino_prompt=cmd.get('dino_prompt', ''),
+                    dino_box_threshold=float(cmd.get('box_threshold', 0.3)),
+                    dino_text_threshold=float(cmd.get('text_threshold', 0.25)),
+                    max_detections=int(cmd.get('sam_max_detections', 2)),
+                    model_type=cmd.get('sam_model', 'vit_b')
+                )
+
+            mask_result, _, _, _ = generate_mask_from_image(img_np, mask_model, extras, sam_options)
+            if mask_result is None:
+                return gr.update(value=''), gr.update(value=json.dumps({'action': 'removebg_result', 'error': 'Mask generation failed'}))
+
+            from PIL import Image as PILImage2
+            mask_gray = PILImage2.fromarray(mask_result).convert('L')
+            rgba = img.copy().convert('RGBA')
+            rgba.putalpha(mask_gray)
+
+            _, out_path, _ = generate_temp_filename(folder=modules.config.temp_path, extension='png')
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            rgba.save(out_path)
+
+            result = json.dumps({
+                'action': 'removebg_result',
+                'image_url': f'/file={out_path}'
+            })
+            print(f'[Layer Editor] Background removed: {out_path}')
+            return gr.update(value=''), gr.update(value=result)
+
+        def _le_set_inpaint(cmd):
+            """Set inpaint source image and mask via server-side component update.
+
+            This bypasses the unreliable DOM injection into Gradio's sketch component.
+            The JS uploads both images to /upload, then sends their paths here.
+            We load them as numpy arrays and set the Gradio components directly.
+            """
+            import numpy as np
+            from PIL import Image as PILImage
+
+            source_path = cmd.get('source_path', '')
+            mask_path = cmd.get('mask_path', '')
+
+            inpaint_update = gr.update()
+            mask_update = gr.update()
+
+            if source_path:
+                try:
+                    if source_path.startswith('/file='):
+                        source_path = source_path[6:]
+                    img = PILImage.open(source_path).convert('RGB')
+                    source_np = np.array(img)
+                    # Postprocess only accepts plain numpy/PIL/path — NOT dict.
+                    # When Gradio sets this on a sketch component, it becomes
+                    # the background image (the sketch reverts to upload mode
+                    # showing this image, then auto-enters sketch mode).
+                    inpaint_update = gr.update(value=source_np)
+                    print(f'[Layer Editor] Set inpaint source: {source_path} ({source_np.shape})')
+                except Exception as e:
+                    print(f'[Layer Editor] Failed to load source: {e}')
+
+            if mask_path:
+                try:
+                    if mask_path.startswith('/file='):
+                        mask_path = mask_path[6:]
+                    mask_img = PILImage.open(mask_path).convert('RGB')
+                    mask_np = np.array(mask_img)
+                    mask_update = gr.update(value=mask_np)
+                    print(f'[Layer Editor] Set inpaint mask: {mask_path} ({mask_np.shape})')
+                except Exception as e:
+                    print(f'[Layer Editor] Failed to load mask: {e}')
+
+            result = json.dumps({'action': 'set_inpaint_result', 'status': 'ok'})
+            return gr.update(value=''), gr.update(value=result), inpaint_update, mask_update
+
+        layer_editor_command.input(
+            handle_layer_editor_command,
+            inputs=[layer_editor_command],
+            outputs=[layer_editor_command, layer_editor_result, inpaint_input_image, inpaint_mask_image],
+            queue=True, show_progress=False)
 
         def format_queue_html(q):
             import html as _html
@@ -1435,6 +1770,7 @@ with shared.gradio_root:
         ctrls += [removebg_input_image, removebg_mask_model, removebg_cloth_category,
                   removebg_dino_prompt, removebg_sam_model, removebg_box_threshold,
                   removebg_text_threshold, removebg_sam_max_detections]
+        ctrls += [profile_input, topic_input]
 
         def parse_meta(raw_prompt_txt, is_generating):
             loaded_json = None
@@ -1485,7 +1821,7 @@ with shared.gradio_root:
             .then(fn=accumulate_results, inputs=[session_gallery_state, session_batch_state, currentTask, prompt], outputs=[session_gallery_state, session_batch_state]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
-            .then(fn=update_history_link, outputs=history_link) \
+            .then(fn=update_history_link, inputs=[profile_input], outputs=history_link) \
             .then(fn=lambda: None, _js='playNotification').then(fn=lambda: None, _js='refresh_grid_delayed') \
             .then(fn=check_queue_and_continue, inputs=[prompt_queue, prompt],
                   outputs=[prompt_queue, prompt, prompt_queue_display], queue=False, show_progress=False) \
@@ -1569,6 +1905,6 @@ shared.gradio_root.launch(
     server_port=args_manager.args.port,
     share=args_manager.args.share,
     auth=check_auth if (args_manager.args.share or args_manager.args.listen) and auth_enabled else None,
-    allowed_paths=[modules.config.path_outputs],
+    allowed_paths=[modules.config.path_outputs, modules.config.temp_path],
     blocked_paths=[constants.AUTH_FILENAME]
 )

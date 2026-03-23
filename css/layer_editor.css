@@ -1,0 +1,627 @@
+/* ============================================================
+   FjordFooocus Layer Editor — CSS
+   A Photoshop-like layer editor overlay
+   ============================================================ */
+
+/* --- Overlay container --- */
+#layer-editor-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1100;
+    flex-direction: column;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+#layer-editor-overlay.le-visible {
+    display: flex !important;
+}
+
+/* --- Top bar --- */
+#le-topbar {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    min-height: 40px;
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 0 8px;
+    gap: 4px;
+    z-index: 10;
+}
+#le-topbar .le-topbar-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-right: 12px;
+    color: #aaa;
+}
+#le-topbar .le-topbar-separator {
+    width: 1px;
+    height: 20px;
+    background: #444;
+    margin: 0 6px;
+}
+
+/* --- Buttons (shared) --- */
+.le-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2d2d2d;
+    color: #ddd;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    gap: 4px;
+    min-height: 28px;
+}
+.le-btn:hover { background: #3a3a3a; border-color: #777; }
+.le-btn:active { background: #444; }
+.le-btn.le-btn-danger:hover { background: #6b2020; border-color: #a44; }
+.le-btn.le-btn-primary { background: #2a5a8a; border-color: #4a8acf; }
+.le-btn.le-btn-primary:hover { background: #356faa; }
+.le-btn.le-btn-close {
+    margin-left: auto;
+    font-size: 18px;
+    padding: 2px 8px;
+    border: none;
+    background: transparent;
+}
+.le-btn.le-btn-close:hover { background: #c44; color: #fff; }
+
+/* --- Main layout --- */
+#le-main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* --- Left toolbar --- */
+#le-toolbar-left {
+    width: 52px;
+    min-width: 52px;
+    background: #222;
+    border-right: 1px solid #3a3a3a;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+    gap: 2px;
+    align-items: center;
+    overflow-y: auto;
+}
+.le-tool-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: #bbb;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.1s;
+}
+.le-tool-btn:hover { background: #3a3a3a; }
+.le-tool-btn.active { background: #2a5a8a; border-color: #4a8acf; color: #fff; }
+.le-tool-btn[data-tool="mask"] { color: #e8a040; }
+.le-tool-btn[data-tool="mask"].active { background: #5a4a2a; border-color: #e8a040; color: #ffd080; }
+.le-tool-btn[title]::after { content: none; }
+
+.le-tool-separator {
+    width: 28px;
+    height: 1px;
+    background: #444;
+    margin: 4px 0;
+}
+
+/* Small tool buttons (layer actions, etc) */
+.le-tool-btn-small {
+    width: 32px !important;
+    height: 28px !important;
+    font-size: 14px !important;
+}
+
+/* Brush controls below tools */
+#le-brush-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px;
+    margin-top: auto;
+    border-top: 1px solid #3a3a3a;
+    width: 100%;
+    box-sizing: border-box;
+}
+#le-brush-controls input[type="color"] {
+    width: 32px;
+    height: 24px;
+    border: 1px solid #555;
+    border-radius: 3px;
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+}
+.le-brush-slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 1px;
+}
+.le-brush-slider-group label {
+    font-size: 9px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.le-brush-slider-group input[type="range"] {
+    width: 42px;
+    height: 12px;
+    accent-color: #4a8acf;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #444;
+    border-radius: 3px;
+}
+.le-brush-slider-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4a8acf;
+    cursor: pointer;
+}
+.le-brush-slider-group span {
+    font-size: 9px;
+    color: #aaa;
+}
+#le-brush-size-display {
+    font-size: 9px;
+    color: #aaa;
+}
+
+/* --- Canvas container --- */
+#le-canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #2a2a2a;
+    cursor: default;
+}
+#le-composite, #le-overlay {
+    position: absolute;
+    top: 0; left: 0;
+}
+#le-composite { z-index: 1; }
+#le-overlay { z-index: 2; }
+
+/* Checkerboard transparency pattern (drawn on canvas, but also CSS fallback) */
+#le-canvas-container .le-checkerboard-bg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-image:
+        linear-gradient(45deg, #333 25%, transparent 25%),
+        linear-gradient(-45deg, #333 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #333 75%),
+        linear-gradient(-45deg, transparent 75%, #333 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* --- Right sidebar --- */
+#le-sidebar-right {
+    width: 280px;
+    min-width: 280px;
+    background: #222;
+    border-left: 1px solid #3a3a3a;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* --- Layer panel --- */
+#le-layer-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 200px;
+}
+#le-layer-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #3a3a3a;
+    font-weight: 600;
+    font-size: 12px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#le-layer-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+}
+.le-layer-item {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 6px;
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.le-layer-item:hover { background: #2d2d2d; }
+.le-layer-item.active { background: #2a3a5a; border-color: #4a7abf; }
+.le-layer-item.drag-over { border-top: 2px solid #4a8acf; }
+.le-layer-item.mask-drop-target { border: 2px dashed #e8a040; background: #3a3020; }
+.le-layer-item.le-mask-child {
+    margin-left: 16px;
+    border-left: 3px solid #e8a040;
+    background: #252015;
+}
+.le-layer-item.le-mask-child.active { background: #35301a; border-color: #e8a040; }
+.le-mask-indicator {
+    color: #e8a040;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-right: -2px;
+    title: 'Mask layer';
+}
+
+.le-layer-row-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+}
+.le-layer-thumb {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #1a1a1a;
+    flex-shrink: 0;
+    image-rendering: auto;
+}
+.le-layer-name {
+    flex: 1;
+    font-size: 12px;
+    color: #ddd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.le-layer-name input {
+    width: 100%;
+    background: #333;
+    border: 1px solid #555;
+    color: #eee;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 12px;
+}
+.le-layer-icon-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.le-layer-icon-btn:hover { background: #3a3a3a; color: #ddd; }
+.le-layer-icon-btn.off { color: #555; }
+
+.le-layer-row-bottom {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0 0 46px;
+    font-size: 11px;
+}
+.le-layer-row-bottom select {
+    flex: 1;
+    background: #2d2d2d;
+    border: 1px solid #555;
+    color: #ccc;
+    border-radius: 3px;
+    padding: 1px 2px;
+    font-size: 11px;
+    max-width: 100px;
+}
+.le-layer-row-bottom input[type="range"] {
+    flex: 1;
+    height: 14px;
+    accent-color: #4a8acf;
+    cursor: pointer;
+}
+.le-layer-opacity-label {
+    width: 28px;
+    text-align: right;
+    color: #999;
+    font-size: 10px;
+}
+
+/* Layer buttons bar */
+#le-layer-buttons {
+    display: flex;
+    padding: 4px 6px;
+    gap: 3px;
+    border-top: 1px solid #3a3a3a;
+    background: #252525;
+    flex-wrap: wrap;
+}
+#le-layer-buttons .le-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 4px;
+    font-size: 11px;
+}
+
+/* --- Action panel --- */
+#le-action-panel {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid #3a3a3a;
+    max-height: 50%;
+    overflow: hidden;
+}
+#le-action-panel-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #3a3a3a;
+    font-weight: 600;
+    font-size: 12px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#le-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 3px;
+    padding: 4px 6px;
+}
+#le-action-buttons .le-action-btn {
+    padding: 6px 2px;
+    font-size: 11px;
+    text-align: center;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #2d2d2d;
+    color: #ccc;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+#le-action-buttons .le-action-btn:hover { background: #3a3a3a; }
+#le-action-buttons .le-action-btn.active { background: #2a5a8a; border-color: #4a8acf; color: #fff; }
+
+#le-action-controls {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+#le-action-controls .le-control-group {
+    margin-bottom: 8px;
+}
+#le-action-controls label {
+    display: block;
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 3px;
+}
+#le-action-controls select,
+#le-action-controls input[type="text"],
+#le-action-controls textarea {
+    width: 100%;
+    background: #2d2d2d;
+    border: 1px solid #555;
+    color: #ddd;
+    border-radius: 4px;
+    padding: 5px 6px;
+    font-size: 12px;
+    box-sizing: border-box;
+}
+#le-action-controls textarea {
+    resize: vertical;
+    min-height: 50px;
+}
+#le-action-controls input[type="range"] {
+    width: 100%;
+    accent-color: #4a8acf;
+}
+#le-action-controls .le-range-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#le-action-controls .le-range-value {
+    font-size: 11px;
+    color: #aaa;
+    min-width: 30px;
+    text-align: right;
+}
+#le-action-controls .le-checkbox-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+#le-action-controls .le-checkbox-row label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: #ccc;
+    cursor: pointer;
+}
+
+#le-action-generate-btn {
+    margin-top: 8px;
+}
+
+/* --- Preview accept bar --- */
+#le-preview-bar {
+    display: none;
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 8px 16px;
+    gap: 10px;
+    align-items: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+#le-preview-bar.visible { display: flex; }
+#le-preview-bar .le-preview-label {
+    font-size: 13px;
+    color: #aaa;
+    margin-right: 4px;
+}
+
+/* --- Status bar --- */
+#le-statusbar {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    min-height: 24px;
+    padding: 0 10px;
+    background: #222;
+    border-top: 1px solid #3a3a3a;
+    font-size: 11px;
+    color: #888;
+    gap: 16px;
+}
+
+/* --- Progress overlay --- */
+#le-progress-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 50;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+}
+#le-progress-overlay.visible { display: flex; }
+#le-progress-text {
+    color: #eee;
+    font-size: 14px;
+}
+#le-progress-bar-container {
+    width: 300px;
+    height: 6px;
+    background: #444;
+    border-radius: 3px;
+    overflow: hidden;
+}
+#le-progress-bar {
+    height: 100%;
+    background: #4a8acf;
+    width: 0%;
+    transition: width 0.3s;
+}
+
+/* --- Context menu (layer) --- */
+.le-context-menu {
+    position: fixed;
+    z-index: 1200;
+    background: #2d2d2d;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 4px 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    min-width: 160px;
+}
+.le-context-menu-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #ddd;
+}
+.le-context-menu-item:hover { background: #3a3a3a; }
+.le-context-menu-separator {
+    height: 1px;
+    background: #444;
+    margin: 4px 0;
+}
+
+/* --- File input (hidden) --- */
+#le-file-input, #le-project-file-input {
+    display: none;
+}
+
+/* --- Scrollbar styling --- */
+#le-layer-list::-webkit-scrollbar,
+#le-action-controls::-webkit-scrollbar {
+    width: 6px;
+}
+#le-layer-list::-webkit-scrollbar-track,
+#le-action-controls::-webkit-scrollbar-track {
+    background: transparent;
+}
+#le-layer-list::-webkit-scrollbar-thumb,
+#le-action-controls::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
+}
+#le-layer-list::-webkit-scrollbar-thumb:hover,
+#le-action-controls::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+/* --- Inpaint mask mode indicator --- */
+#le-canvas-container.mask-mode {
+    cursor: crosshair;
+}
+#le-canvas-container.mask-mode #le-overlay {
+    pointer-events: auto;
+}
+
+/* --- Send to Editor button (in lightbox) --- */
+#lightboxModal .le-send-to-editor-btn {
+    background: rgba(40, 40, 40, 0.85);
+    color: #ddd;
+    border: 1px solid #666;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+#lightboxModal .le-send-to-editor-btn:hover {
+    background: rgba(60, 80, 120, 0.9);
+    border-color: #88b;
+}

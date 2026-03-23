@@ -171,6 +171,11 @@ function modalKeyHandler(event) {
     case "ArrowRight":
         modalNextImage(event);
         break;
+    case "e":
+    case "E":
+        var sendBtn = document.querySelector('.modalSendToEditor');
+        if (sendBtn) sendBtn.click();
+        break;
     case "Escape":
         closeModal();
         break;
@@ -603,6 +608,23 @@ document.addEventListener("DOMContentLoaded", function() {
     }, true);
     modalDelete.title = "Delete image (Del)";
     modalControls.appendChild(modalDelete);
+
+    const modalSendToEditor = document.createElement('span');
+    modalSendToEditor.className = 'modalSendToEditor cursor';
+    modalSendToEditor.innerHTML = '&#127912;';
+    modalSendToEditor.title = 'Send to Layer Editor';
+    modalSendToEditor.addEventListener('click', function(event) {
+        event.stopPropagation();
+        var modalImage = document.getElementById('modalImage');
+        if (!modalImage || !modalImage.src) return;
+        if (window.layerEditor && typeof window.layerEditor.addLayerFromURL === 'function') {
+            window.layerEditor.addLayerFromURL(modalImage.src);
+            closeModal();
+        } else {
+            alert('Layer Editor is not initialized. Click the Layer Editor button first.');
+        }
+    }, true);
+    modalControls.appendChild(modalSendToEditor);
 
     const modalClose = document.createElement('span');
     modalClose.className = 'modalClose cursor';

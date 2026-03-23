@@ -51,6 +51,8 @@ def javascript_html():
     head += f'<script type="text/javascript" src="{camera_capture_js_path}"></script>\n'
     camera_fullscreen_js_path = webpath('javascript/camera_fullscreen.js')
     head += f'<script type="text/javascript" src="{camera_fullscreen_js_path}"></script>\n'
+    layer_editor_js_path = webpath('javascript/layer_editor.js')
+    head += f'<script type="text/javascript" src="{layer_editor_js_path}"></script>\n'
     head += f'<meta name="samples-path" content="{samples_path}">\n'
 
     if args_manager.args.theme:
@@ -62,6 +64,8 @@ def javascript_html():
 def css_html():
     style_css_path = webpath('css/style.css')
     head = f'<link rel="stylesheet" property="stylesheet" href="{style_css_path}">'
+    layer_editor_css_path = webpath('css/layer_editor.css')
+    head += f'\n<link rel="stylesheet" property="stylesheet" href="{layer_editor_css_path}">'
     return head
 
 

@@ -345,6 +345,12 @@ div:has(> #positive_prompt) {
 .modalStar:hover {
     color: #fbbf24 !important;
 }
+.modalSendToEditor {
+    color: rgba(255,255,255,0.8) !important;
+}
+.modalSendToEditor:hover {
+    color: #a78bfa !important;
+}
 .modalDelete {
     color: #ff4444 !important;
 }

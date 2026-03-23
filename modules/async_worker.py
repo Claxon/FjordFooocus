@@ -169,6 +169,10 @@ class AsyncTask:
         self.removebg_text_threshold = args.pop()
         self.removebg_sam_max_detections = args.pop()
 
+        # Per-request user identity — captured at submit time so concurrent users don't collide
+        self.profile = (args.pop() or '').strip() or 'anonymous'
+        self.topic = (args.pop() or '').strip()
+
 async_tasks = []
 
 
@@ -402,7 +406,7 @@ def worker():
             d.append(('Metadata Scheme', 'metadata_scheme',
                       async_task.metadata_scheme.value if async_task.save_metadata_to_images else async_task.save_metadata_to_images))
             d.append(('Version', 'version', 'FjordFooocus v' + fooocus_version.version))
-            img_paths.append(log(x, d, metadata_parser, async_task.output_format, task, persist_image))
+            img_paths.append(log(x, d, metadata_parser, async_task.output_format, task, persist_image, profile=async_task.profile, topic=async_task.topic))
 
         return img_paths
 
@@ -892,7 +896,14 @@ def worker():
                 async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_inpaint)) \
                 and isinstance(async_task.inpaint_input_image, dict):
             inpaint_image = async_task.inpaint_input_image['image']
-            inpaint_mask = async_task.inpaint_input_image['mask'][:, :, 0]
+            inpaint_mask_raw = async_task.inpaint_input_image.get('mask')
+            if inpaint_mask_raw is not None and isinstance(inpaint_mask_raw, np.ndarray) and inpaint_mask_raw.ndim == 3:
+                inpaint_mask = inpaint_mask_raw[:, :, 0]
+            else:
+                # Mask may be None after repeated image injections from the layer editor;
+                # fall back to an empty mask (all-zero = nothing masked).
+                # Advanced masking will override this if enabled.
+                inpaint_mask = np.zeros(inpaint_image.shape[:2], dtype=np.uint8)
 
             if async_task.inpaint_advanced_masking_checkbox:
                 if isinstance(async_task.inpaint_mask_image_upload, dict):
@@ -1020,7 +1031,7 @@ def worker():
                     progressbar(async_task, current_progress, 'Checking for NSFW content ...')
                     img = default_censor(img)
                 progressbar(async_task, current_progress, f'Saving image {current_task_id + 1}/{total_count} to system ...')
-                uov_image_path = log(img, d, output_format=async_task.output_format, persist_image=persist_image)
+                uov_image_path = log(img, d, output_format=async_task.output_format, persist_image=persist_image, profile=async_task.profile, topic=async_task.topic)
                 yield_result(async_task, uov_image_path, current_progress, async_task.black_out_nsfw, False,
                              do_not_show_finished_images=not show_intermediate_results or async_task.disable_intermediate_results)
                 return current_progress, img, prompt, negative_prompt
@@ -1214,7 +1225,7 @@ def worker():
 
                 progressbar(async_task, 90, 'Saving result ...')
                 pil_img = Image.fromarray(rgba, 'RGBA')
-                output_path = modules.config.get_effective_output_path()
+                output_path = modules.config.get_effective_output_path(self.profile, self.topic)
                 _, local_temp_filename, _ = generate_temp_filename(folder=output_path, extension='png')
                 os.makedirs(os.path.dirname(local_temp_filename), exist_ok=True)
                 pil_img.save(local_temp_filename)
@@ -1273,7 +1284,7 @@ def worker():
                     progressbar(async_task, 100, 'Checking for NSFW content ...')
                     async_task.uov_input_image = default_censor(async_task.uov_input_image)
                 progressbar(async_task, 100, 'Saving image to system ...')
-                uov_input_image_path = log(async_task.uov_input_image, d, output_format=async_task.output_format)
+                uov_input_image_path = log(async_task.uov_input_image, d, output_format=async_task.output_format, profile=async_task.profile, topic=async_task.topic)
                 yield_result(async_task, uov_input_image_path, 100, async_task.black_out_nsfw, False,
                              do_not_show_finished_images=True)
                 return

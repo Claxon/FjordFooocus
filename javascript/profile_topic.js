@@ -6,10 +6,10 @@
 
     var PROFILE_KEY = 'fooocus_profile';
     var TOPICS_KEY = 'fooocus_topics';
-    var ACTIVE_TOPIC_KEY = 'fooocus_active_topic';
 
     function getProfile() {
-        return localStorage.getItem(PROFILE_KEY) || 'default';
+        // Return empty string for new users — they must set a name before generating
+        return localStorage.getItem(PROFILE_KEY) || '';
     }
 
     function getTopics() {
@@ -20,10 +20,6 @@
 
     function saveTopics(topics) {
         localStorage.setItem(TOPICS_KEY, JSON.stringify(topics));
-    }
-
-    function getActiveTopic() {
-        return localStorage.getItem(ACTIVE_TOPIC_KEY) || '';
     }
 
     function addTopic(name) {
@@ -78,22 +74,16 @@
     window.fooocusProfile = {
         getProfile: getProfile,
         getTopics: getTopics,
-        addTopic: addTopic,
-        getActiveTopic: getActiveTopic
+        addTopic: addTopic
     };
 
     function initSync() {
-        // Set profile textbox from localStorage
+        // Restore profile from localStorage (returning users get their name pre-filled)
         var storedProfile = getProfile();
-        if (storedProfile && storedProfile !== 'default') {
+        if (storedProfile) {
             setGradioTextboxValue('profile_input', storedProfile);
         }
-
-        // Set topic textbox from localStorage
-        var storedTopic = getActiveTopic();
-        if (storedTopic) {
-            setGradioTextboxValue('topic_input', storedTopic);
-        }
+        // Topic intentionally NOT restored — starts empty on every page load
 
         // Build topic suggestions datalist
         rebuildDatalist();
@@ -104,23 +94,49 @@
             var profileEl = profileContainer.querySelector('textarea') || profileContainer.querySelector('input');
             if (profileEl) {
                 profileEl.addEventListener('change', function() {
-                    var val = this.value.trim() || 'default';
-                    localStorage.setItem(PROFILE_KEY, val);
+                    var val = this.value.trim();
+                    if (val) {
+                        localStorage.setItem(PROFILE_KEY, val);
+                    }
                 });
             }
         }
 
-        // Listen for topic changes to save to localStorage and add to suggestions
+        // Listen for topic changes to save to history list (not to active-topic localStorage)
         var topicContainer = document.getElementById('topic_input');
         if (topicContainer) {
             var topicEl = topicContainer.querySelector('textarea') || topicContainer.querySelector('input');
             if (topicEl) {
                 topicEl.addEventListener('change', function() {
                     var val = this.value.trim();
-                    localStorage.setItem(ACTIVE_TOPIC_KEY, val);
                     if (val) addTopic(val);
                 });
             }
+        }
+
+        // Guard: require a profile name before generating
+        var genBtn = document.getElementById('generate_button');
+        if (genBtn) {
+            genBtn.addEventListener('click', function(event) {
+                var profileContainer = document.getElementById('profile_input');
+                if (!profileContainer) return;
+                var el = profileContainer.querySelector('textarea') || profileContainer.querySelector('input');
+                if (el && !el.value.trim()) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    var name = window.prompt('Enter your name to save your images.\n\nThis keeps your images separate from other users:', '');
+                    if (name && name.trim()) {
+                        var trimmed = name.trim();
+                        localStorage.setItem(PROFILE_KEY, trimmed);
+                        setGradioTextboxValue('profile_input', trimmed);
+                        // Re-trigger the click after Gradio has a tick to process the input event
+                        setTimeout(function() { genBtn.click(); }, 200);
+                    } else {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.focus();
+                    }
+                }
+            }, true); // capture phase — runs before Gradio's handlers
         }
     }
 
