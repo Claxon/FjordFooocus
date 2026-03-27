@@ -23,6 +23,8 @@ from modules.sdxl_styles import legal_style_names
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
 from modules.auth import auth_enabled, check_auth
+import modules.auth as auth_module
+import modules.admin as admin_module
 from modules.util import is_json
 
 def get_task(*args):
@@ -162,7 +164,96 @@ with shared.gradio_root:
     inpaint_engine_state = gr.State('empty')
     session_gallery_state = gr.State([])
     session_batch_state = gr.State([])
-    with gr.Row():
+    login_state = gr.State(value='')
+
+    # ======================== LOGIN PAGE (full-page, shown first) ========================
+    # All three pages are visible=True to Gradio so components render.
+    # CSS class 'page-hidden' controls actual display (see style.css).
+    with gr.Column(elem_id='login_page') as login_page:
+        gr.HTML(value='<div style="max-width:400px;margin:80px auto 0;text-align:center">'
+                '<h1 style="margin-bottom:4px">FjordFooocus</h1>'
+                '<p style="color:#888;margin-bottom:24px">Sign in to continue</p></div>')
+        with gr.Column(elem_id='login_form_wrap'):
+            login_username = gr.Textbox(label='Username', elem_id='login_username',
+                                        lines=1, max_lines=1, placeholder='Username')
+            login_password = gr.Textbox(label='Password', elem_id='login_password',
+                                        lines=1, max_lines=1, placeholder='Password')
+            with gr.Row():
+                login_btn = gr.Button(value='Login', elem_id='login_btn', variant='primary')
+                register_btn = gr.Button(value='Register', elem_id='register_btn')
+            guest_btn = gr.Button(value='Continue as Guest', elem_id='guest_btn',
+                                  variant='secondary')
+            login_message = gr.HTML(value='', elem_id='login_message')
+        # Hidden textbox for JS session restore
+        login_restore = gr.Textbox(elem_id='login_restore', visible=False)
+
+    # ======================== ADMIN PAGE (full-page, hidden by default) ========================
+    with gr.Column(elem_id='admin_page', elem_classes=['page-hidden']) as admin_page:
+        with gr.Row(elem_id='admin_header'):
+            gr.HTML(value='<h2 style="margin:0">Admin Panel</h2>')
+            admin_back_btn = gr.Button(value='Back to App', elem_id='admin_back_btn',
+                                       scale=0, min_width=120)
+
+        gr.HTML(value='<h3 style="margin:4px 0 8px">Prompt Search</h3>')
+        with gr.Row():
+            search_query = gr.Textbox(label='Search all users', placeholder='Type to search prompts\u2026',
+                                      lines=1, max_lines=1, scale=3, elem_id='admin_search_query')
+            search_preset = gr.Dropdown(label='Unsafe Preset',
+                                        choices=admin_module.get_unsafe_preset_names(),
+                                        value='(none)', scale=1)
+        with gr.Accordion(label='Filters', open=False, elem_id='search_filters_accordion'):
+            with gr.Row():
+                search_account = gr.Dropdown(label='Account', choices=['(all)'],
+                                             value='(all)', scale=1)
+                search_date_from = gr.Textbox(label='From', placeholder='YYYY-MM-DD',
+                                              lines=1, max_lines=1, scale=1)
+                search_date_to = gr.Textbox(label='To', placeholder='YYYY-MM-DD',
+                                            lines=1, max_lines=1, scale=1)
+        # Hidden triggers for JS debounce and delete
+        search_trigger = gr.Textbox(elem_id='search_trigger', visible=False)
+        search_delete_request = gr.Textbox(elem_id='search_delete_request', visible=False)
+        with gr.Row(elem_id='search_toolbar'):
+            search_status = gr.HTML(value='<span style="color:#888">Type at least 2 characters to search</span>',
+                                    elem_id='search_status')
+            search_select_all_btn = gr.Button(value='Select All', elem_id='search_select_all_btn',
+                                              scale=0, min_width=90, visible=True)
+            search_delete_btn = gr.Button(value='Delete Selected', elem_id='search_delete_selected_btn',
+                                          variant='stop', scale=0, min_width=120, visible=True)
+        search_results_html = gr.HTML(value='', elem_id='search_results_html')
+
+        with gr.Accordion(label='Account Management', open=False):
+            admin_refresh_btn = gr.Button(value='Refresh Accounts', elem_id='admin_refresh_btn')
+            admin_accounts_table = gr.Dataframe(
+                headers=['Username', 'Created', 'Last Login', 'Images', 'Disk Usage', 'Disabled'],
+                datatype=['str', 'str', 'str', 'number', 'str', 'bool'],
+                interactive=False, elem_id='admin_accounts_table')
+            with gr.Row():
+                admin_account_selector = gr.Dropdown(label='Select Account', choices=[],
+                                                     elem_id='admin_account_selector')
+                admin_disable_btn = gr.Button(value='Disable/Enable', elem_id='admin_disable_btn',
+                                              scale=0, min_width=120)
+                admin_delete_confirm = gr.Checkbox(label='Confirm', value=False,
+                                                   elem_id='admin_delete_confirm')
+                admin_delete_btn = gr.Button(value='Delete Account', elem_id='admin_delete_btn',
+                                             variant='stop', scale=0, min_width=120)
+            admin_account_message = gr.HTML(value='', elem_id='admin_account_message')
+
+        with gr.Accordion(label='Image Cleanup', open=False):
+            with gr.Row():
+                cleanup_account = gr.Dropdown(label='Account', choices=['(all)'],
+                                              elem_id='cleanup_account')
+                cleanup_age = gr.Slider(label='Older than (days)', minimum=1, maximum=365,
+                                        value=30, step=1)
+            with gr.Row():
+                cleanup_temporary = gr.Checkbox(label='TEMPORARY', value=True)
+                cleanup_discarded = gr.Checkbox(label='DISCARDED', value=True)
+            with gr.Row():
+                cleanup_preview_btn = gr.Button(value='Preview (dry run)')
+                cleanup_delete_btn = gr.Button(value='Delete Files', variant='stop')
+            cleanup_result = gr.HTML(value='', elem_id='cleanup_result')
+
+    # ======================== MAIN APP (hidden until login) ========================
+    with gr.Row(elem_id='main_app', elem_classes=['page-hidden']) as main_app:
         with gr.Column(scale=2):
             with gr.Row():
                 progress_window = grh.Image(label='Preview', show_label=True, visible=False, height=768,
@@ -197,7 +288,7 @@ with shared.gradio_root:
                     topic_input = gr.Textbox(label='Topic', show_label=False, placeholder='\U0001F4C1 Topic (optional) \u2014 organizes images into subdirectories',
                                              elem_id='topic_input', lines=1, max_lines=1, elem_classes=['topic_input'])
 
-                with gr.Column(scale=3, min_width=0):
+                with gr.Column(scale=3, min_width=120):
                     generate_button = gr.Button(label="Generate", value="Generate", elem_classes='type_row', elem_id='generate_button', visible=True)
                     reset_button = gr.Button(label="Reconnect", value="Reconnect", elem_classes='type_row', elem_id='reset_button', visible=False)
                     load_parameter_button = gr.Button(label="Load Parameters", value="Load Parameters", elem_classes='type_row', elem_id='load_parameter_button', visible=False)
@@ -694,8 +785,16 @@ with shared.gradio_root:
 
         with gr.Column(scale=1, visible=modules.config.default_advanced_checkbox) as advanced_column:
             with gr.Tab(label='Settings'):
-                profile_input = gr.Textbox(label='Profile', value='', placeholder='Enter your name…',
-                                           elem_id='profile_input', lines=1, max_lines=1)
+                # --- User status bar (login/admin controls are full-page, above) ---
+                with gr.Row(elem_id='user_status_bar'):
+                    logged_in_label = gr.HTML(value='')
+                    admin_open_btn = gr.Button(value='Admin Panel', elem_id='admin_open_btn',
+                                               visible=False, scale=0, min_width=100)
+                    logout_btn = gr.Button(value='Logout', elem_id='logout_btn', scale=0, min_width=80)
+
+                profile_input = gr.Textbox(label='Profile', value='', placeholder='(set by login)',
+                                           elem_id='profile_input', lines=1, max_lines=1,
+                                           interactive=False, visible=False)
 
                 if not args_manager.args.disable_preset_selection:
                     preset_selection = gr.Dropdown(label='Preset',
@@ -820,6 +919,7 @@ with shared.gradio_root:
 
                 history_link = gr.HTML()
                 shared.gradio_root.load(update_history_link, inputs=[profile_input], outputs=history_link, queue=False, show_progress=False)
+                gr.HTML(value='<a href="http://127.0.0.1:7867/" target="_blank">\U0001F5BC Gallery Browser</a>')
 
                 gr.HTML(value='<div id="camera_device_settings"></div>')
 
@@ -1161,6 +1261,443 @@ with shared.gradio_root:
             # Topic is now per-task via ctrls — no global state needed
             pass
 
+        # --- Login / Auth Handlers ---
+
+        def _get_account_choices():
+            accounts = auth_module.get_all_accounts()
+            names = [a['username'] for a in accounts]
+            if 'guest' not in [n.lower() for n in names]:
+                names.insert(0, 'guest')
+            return names
+
+        def _build_accounts_table_data():
+            accounts = auth_module.get_all_accounts()
+            stats = admin_module.get_account_stats(modules.config.path_outputs)
+            stats_map = {s['username'].lower(): s for s in stats}
+            rows = []
+            # Always include guest row
+            seen_guest = False
+            for a in accounts:
+                if a['username'].lower() == 'guest':
+                    seen_guest = True
+                s = stats_map.get(a['username'].lower(), {})
+                rows.append([
+                    a['username'],
+                    (a.get('created_at') or '')[:19],
+                    (a.get('last_login') or 'Never')[:19],
+                    s.get('image_count', 0),
+                    admin_module.format_bytes(s.get('total_bytes', 0)),
+                    a.get('disabled', False),
+                ])
+            if not seen_guest:
+                gs = stats_map.get('guest', {})
+                rows.insert(0, [
+                    'guest',
+                    '(built-in)',
+                    '',
+                    gs.get('image_count', 0),
+                    admin_module.format_bytes(gs.get('total_bytes', 0)),
+                    False,
+                ])
+            return rows
+
+        # Page switching is done via JS (adding/removing 'page-hidden' CSS class)
+        # because Gradio 3.x doesn't reliably toggle visibility on top-level containers.
+        # The Python handlers return data updates only; JS handles page display.
+
+        _switch_to_app_js = """
+        () => {
+            document.getElementById('login_page').classList.add('page-hidden');
+            document.getElementById('admin_page').classList.add('page-hidden');
+            document.getElementById('main_app').classList.remove('page-hidden');
+        }"""
+        _switch_to_login_js = """
+        () => {
+            document.getElementById('login_page').classList.remove('page-hidden');
+            document.getElementById('admin_page').classList.add('page-hidden');
+            document.getElementById('main_app').classList.add('page-hidden');
+        }"""
+        _switch_to_admin_js = """
+        () => {
+            document.getElementById('login_page').classList.add('page-hidden');
+            document.getElementById('admin_page').classList.remove('page-hidden');
+            document.getElementById('main_app').classList.add('page-hidden');
+        }"""
+
+        # login_outputs: login_state, logged_in_label, profile_input, login_message, admin_open_btn
+        # IMPORTANT: login_state is gr.State — must return raw values, NOT gr.update()
+        _no_change_5 = [gr.update()] * 5  # only used when no action needed (gr.State ignores gr.update)
+
+        def do_login(username, password):
+            success, msg = auth_module.authenticate(username, password)
+            if not success:
+                return [
+                    '',  # login_state (raw value for gr.State)
+                    gr.update(),  # logged_in_label
+                    gr.update(),  # profile_input
+                    gr.update(value=f'<span style="color:#ff4444">{msg}</span>'),  # login_message
+                    gr.update(),  # admin_open_btn
+                ]
+            canonical = msg  # authenticate returns canonical username on success
+            is_admin_user = auth_module.is_admin(canonical)
+            return [
+                canonical,  # login_state (raw value for gr.State)
+                gr.update(value=f'<span style="font-size:14px">Logged in as: <b>{canonical}</b>'
+                          + (' &nbsp;<span style="color:#4a9eff">[Admin]</span>' if is_admin_user else '')
+                          + '</span>'),
+                gr.update(value=canonical),  # profile_input
+                gr.update(value=''),  # login_message
+                gr.update(visible=is_admin_user),  # admin_open_btn
+            ]
+
+        def do_register(username, password):
+            success, msg = auth_module.register_user(username, password)
+            if not success:
+                return [
+                    '',  # login_state (raw value for gr.State)
+                    gr.update(),  # logged_in_label
+                    gr.update(),  # profile_input
+                    gr.update(value=f'<span style="color:#ff4444">{msg}</span>'),  # login_message
+                    gr.update(),  # admin_open_btn
+                ]
+            return do_login(username, password)
+
+        def do_guest():
+            return [
+                'guest',  # login_state (raw value for gr.State)
+                gr.update(value='<span style="font-size:14px">Logged in as: <b>guest</b>'
+                          ' &nbsp;<span style="color:#888">[Guest]</span></span>'),
+                gr.update(value='guest'),  # profile_input
+                gr.update(value=''),  # login_message
+                gr.update(visible=False),  # admin_open_btn
+            ]
+
+        def do_logout():
+            return [
+                '',  # login_state (raw value for gr.State)
+                gr.update(value=''),  # logged_in_label
+                gr.update(value=''),  # profile_input
+                gr.update(value=''),  # login_message
+                gr.update(visible=False),  # admin_open_btn
+            ]
+
+        def do_restore_login(restore_data):
+            """Restore login session from JS localStorage."""
+            if not restore_data or not restore_data.strip():
+                return ['', gr.update(), gr.update(), gr.update(), gr.update()]
+            try:
+                data = json.loads(restore_data)
+                username = data.get('username', '')
+                password = data.get('password', '')
+                if username == 'guest' and password == '':
+                    return do_guest()
+                if username and password:
+                    return do_login(username, password)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            return ['', gr.update(), gr.update(), gr.update(), gr.update()]
+
+        login_outputs = [login_state, logged_in_label, profile_input, login_message, admin_open_btn]
+
+        # Login button: server validates, JS switches page only on success.
+        # We use a two-step approach: the _js always runs, but the JS checks
+        # if login_message got an error before switching pages.
+        _login_success_js = """
+        () => {
+            // Small delay to let Gradio update the DOM with server response
+            setTimeout(() => {
+                var msg = document.querySelector('#login_message');
+                if (msg && msg.textContent && msg.textContent.trim() !== '' && msg.querySelector('[style*="ff4444"]')) {
+                    return; // error message shown — stay on login page
+                }
+                var profileEl = document.querySelector('#profile_input textarea, #profile_input input');
+                if (profileEl && profileEl.value && profileEl.value.trim()) {
+                    document.getElementById('login_page').classList.add('page-hidden');
+                    document.getElementById('admin_page').classList.add('page-hidden');
+                    document.getElementById('main_app').classList.remove('page-hidden');
+                }
+            }, 150);
+        }"""
+
+        login_btn.click(do_login, inputs=[login_username, login_password], outputs=login_outputs,
+                        queue=False, show_progress=False).then(fn=lambda: None, _js=_login_success_js)
+        register_btn.click(do_register, inputs=[login_username, login_password], outputs=login_outputs,
+                           queue=False, show_progress=False).then(fn=lambda: None, _js=_login_success_js)
+        guest_btn.click(do_guest, inputs=[], outputs=login_outputs,
+                        queue=False, show_progress=False, _js=_switch_to_app_js)
+        logout_btn.click(do_logout, inputs=[], outputs=login_outputs,
+                         queue=False, show_progress=False, _js=_switch_to_login_js)
+        login_restore.input(do_restore_login, inputs=[login_restore], outputs=login_outputs,
+                            queue=False, show_progress=False).then(fn=lambda: None, _js=_login_success_js)
+
+        # Admin page open/back handlers — auto-load accounts when opening
+        def open_admin_and_load(current_user):
+            if not current_user or not auth_module.is_admin(current_user):
+                return [gr.update(), gr.update(), gr.update(), gr.update()]
+            rows = _build_accounts_table_data()
+            choices = _get_account_choices()
+            return [
+                gr.update(value=rows),
+                gr.update(choices=choices),
+                gr.update(choices=['(all)'] + choices, value='(all)'),
+                gr.update(choices=['(all)'] + choices, value='(all)'),
+            ]
+
+        admin_open_btn.click(open_admin_and_load, inputs=[login_state],
+                             outputs=[admin_accounts_table, admin_account_selector,
+                                      cleanup_account, search_account],
+                             queue=False, show_progress=False, _js=_switch_to_admin_js)
+        admin_back_btn.click(fn=lambda: None, _js=_switch_to_app_js,
+                             queue=False, show_progress=False)
+
+        # --- Admin Panel Handlers (all require runtime admin check via login_state) ---
+
+        _admin_denied = '<span style="color:#ff4444">Access denied. Admin privileges required.</span>'
+
+        def admin_refresh_accounts(current_user):
+            if not current_user or not auth_module.is_admin(current_user):
+                return [gr.update(), gr.update(), gr.update(), gr.update()]
+            rows = _build_accounts_table_data()
+            choices = _get_account_choices()
+            return [
+                gr.update(value=rows),  # admin_accounts_table
+                gr.update(choices=choices),  # admin_account_selector
+                gr.update(choices=['(all)'] + choices),  # cleanup_account
+                gr.update(choices=['(all)'] + choices),  # search_account
+            ]
+
+        admin_refresh_btn.click(admin_refresh_accounts, inputs=[login_state],
+                                outputs=[admin_accounts_table, admin_account_selector,
+                                         cleanup_account, search_account],
+                                queue=False, show_progress=False)
+
+        def admin_delete_account(current_user, username, confirm):
+            if not current_user or not auth_module.is_admin(current_user):
+                return gr.update(value=_admin_denied)
+            if not username:
+                return gr.update(value='<span style="color:#ff4444">Select an account first.</span>')
+            if username.lower() == 'guest':
+                return gr.update(value='<span style="color:#ff4444">The guest account cannot be deleted.</span>')
+            if not confirm:
+                return gr.update(value='<span style="color:#ff4444">Check the confirm box to delete.</span>')
+            success, msg = auth_module.delete_account(username)
+            color = '#44ff44' if success else '#ff4444'
+            return gr.update(value=f'<span style="color:{color}">{msg}</span>')
+
+        admin_delete_btn.click(admin_delete_account,
+                               inputs=[login_state, admin_account_selector, admin_delete_confirm],
+                               outputs=[admin_account_message], queue=False, show_progress=False)
+
+        def admin_toggle_disable(current_user, username):
+            if not current_user or not auth_module.is_admin(current_user):
+                return gr.update(value=_admin_denied)
+            if not username:
+                return gr.update(value='<span style="color:#ff4444">Select an account first.</span>')
+            accounts = auth_module.get_all_accounts()
+            acc = next((a for a in accounts if a['username'].lower() == username.lower()), None)
+            if not acc:
+                return gr.update(value=f'<span style="color:#ff4444">Account not found.</span>')
+            if acc.get('disabled', False):
+                success, msg = auth_module.enable_account(username)
+            else:
+                success, msg = auth_module.disable_account(username)
+            color = '#44ff44' if success else '#ff4444'
+            return gr.update(value=f'<span style="color:{color}">{msg}</span>')
+
+        admin_disable_btn.click(admin_toggle_disable, inputs=[login_state, admin_account_selector],
+                                outputs=[admin_account_message], queue=False, show_progress=False)
+
+        # Cleanup handlers
+        def do_cleanup(current_user, account, age, temp_checked, disc_checked, dry_run=True):
+            if not current_user or not auth_module.is_admin(current_user):
+                return gr.update(value=_admin_denied)
+            profile = None if account == '(all)' else account
+            cats = []
+            if temp_checked:
+                cats.append('TEMPORARY')
+            if disc_checked:
+                cats.append('DISCARDED')
+            if not cats:
+                return gr.update(value='<span style="color:#ff4444">Select at least one category.</span>')
+            paths, count, total_bytes = admin_module.cleanup_images(
+                modules.config.path_outputs, profile=profile,
+                max_age_days=int(age), categories=cats, dry_run=dry_run)
+            action = 'Would delete' if dry_run else 'Deleted'
+            return gr.update(value=f'<span>{action} <b>{count}</b> files '
+                             f'({admin_module.format_bytes(total_bytes)})</span>')
+
+        cleanup_preview_btn.click(
+            lambda u, a, age, t, d: do_cleanup(u, a, age, t, d, dry_run=True),
+            inputs=[login_state, cleanup_account, cleanup_age, cleanup_temporary, cleanup_discarded],
+            outputs=[cleanup_result], queue=False, show_progress=False)
+        cleanup_delete_btn.click(
+            lambda u, a, age, t, d: do_cleanup(u, a, age, t, d, dry_run=False),
+            inputs=[login_state, cleanup_account, cleanup_age, cleanup_temporary, cleanup_discarded],
+            outputs=[cleanup_result], queue=False, show_progress=False)
+
+        # Search handlers — returns HTML cards with thumbnails
+        import html as html_module
+
+        def _render_search_cards(results, total, shown):
+            if not results:
+                return '<div class="search-no-results">No results found</div>'
+            cards = []
+            for i, r in enumerate(results):
+                path_escaped = html_module.escape(r['path'].replace('\\', '/'))
+                path_data = html_module.escape(r['path'].replace('\\', '/'))
+                snippet = html_module.escape(r.get('prompt_snippet', ''))
+                match_term = html_module.escape(r.get('match', ''))
+                profile = html_module.escape(r['profile'])
+                topic = html_module.escape(r['topic'])
+                category = html_module.escape(r['category'])
+                date = html_module.escape(r['date'])
+                filename = html_module.escape(r['filename'])
+                full_prompt = html_module.escape(r.get('prompt_full', snippet))
+                card_id = f'search_card_{i}'
+
+                cards.append(f'''<div class="search-card" data-path="{path_data}">
+  <label class="search-card-check"><input type="checkbox" class="search-cb" data-path="{path_data}" onchange="window._searchSelectionChanged()"></label>
+  <div class="search-card-thumb" onclick="window._openSearchImage('file={path_escaped}')">
+    <img src="file={path_escaped}" loading="lazy" alt="{filename}">
+  </div>
+  <div class="search-card-body">
+    <div class="search-card-snippet">{snippet}</div>
+    <div class="search-card-meta">
+      <span class="search-tag search-tag-user">{profile}</span>
+      <span class="search-tag">{topic}</span>
+      <span class="search-tag search-tag-cat">{category}</span>
+      {f'<span class="search-tag">{date}</span>' if date else ''}
+      {f'<span class="search-tag search-tag-match">{match_term}</span>' if match_term else ''}
+    </div>
+    <button class="search-more-btn" onclick="var d=document.getElementById(\'{card_id}\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';this.textContent=d.style.display===\'none\'?\'More info\':\'Less info\'">
+      More info
+    </button>
+    <div id="{card_id}" class="search-card-detail" style="display:none">
+      <div class="search-detail-row"><b>File:</b> {filename}</div>
+      <div class="search-detail-row"><b>Full prompt:</b></div>
+      <div class="search-detail-prompt">{full_prompt}</div>
+    </div>
+  </div>
+</div>''')
+            return '\n'.join(cards)
+
+        def do_search(current_user, trigger_val, query, preset, account, date_from, date_to):
+            if not current_user or not auth_module.is_admin(current_user):
+                return [gr.update(value=_admin_denied), gr.update(value='')]
+            if preset and preset != '(none)':
+                query = admin_module.get_unsafe_preset_pattern(preset)
+            if not query or len(query.strip()) < 2:
+                return [gr.update(value='<span style="color:#888">Type at least 2 characters to search</span>'),
+                        gr.update(value='')]
+            profile = None if not account or account == '(all)' else account
+            df = date_from.strip() if date_from else None
+            dt = date_to.strip() if date_to else None
+            try:
+                results, total = admin_module.search_image_prompts(
+                    modules.config.path_outputs, query.strip(), profile=profile,
+                    date_from=df, date_to=dt, limit=60, use_regex=True)
+            except Exception as e:
+                return [gr.update(value=f'<span style="color:#ff4444">Search error: {html_module.escape(str(e))}</span>'),
+                        gr.update(value='')]
+            shown = len(results)
+            status = f'Found <b>{total}</b> matches' + (f' (showing {shown})' if total > shown else '')
+            cards_html = _render_search_cards(results, total, shown)
+            return [gr.update(value=f'<span>{status}</span>'),
+                    gr.update(value=f'<div class="search-results-grid">{cards_html}</div>')]
+
+        search_trigger.input(do_search,
+                             inputs=[login_state, search_trigger, search_query, search_preset,
+                                     search_account, search_date_from, search_date_to],
+                             outputs=[search_status, search_results_html],
+                             queue=False, show_progress=False)
+
+        def on_preset_change(preset):
+            if preset and preset != '(none)':
+                pattern = admin_module.get_unsafe_preset_pattern(preset)
+                return gr.update(value=pattern)
+            return gr.update()
+
+        # When preset changes, fill search box then trigger search
+        def on_preset_change_and_search(current_user, preset, account, date_from, date_to):
+            query = ''
+            if preset and preset != '(none)':
+                query = admin_module.get_unsafe_preset_pattern(preset)
+            if not query:
+                return [gr.update(value=''),
+                        gr.update(value='<span style="color:#888">Type at least 2 characters to search</span>'),
+                        gr.update(value='')]
+            # Run the search directly
+            result = do_search(current_user, '', query, '(none)', account, date_from, date_to)
+            return [gr.update(value=query)] + result
+
+        search_preset.change(on_preset_change_and_search,
+                             inputs=[login_state, search_preset, search_account,
+                                     search_date_from, search_date_to],
+                             outputs=[search_query, search_status, search_results_html],
+                             queue=False, show_progress=False)
+
+        # Delete selected search results
+        def handle_search_delete(current_user, paths_json):
+            if not current_user or not auth_module.is_admin(current_user):
+                return gr.update(value=_admin_denied)
+            if not paths_json or not paths_json.strip():
+                return gr.update(value='')
+            try:
+                paths = json.loads(paths_json)
+            except (json.JSONDecodeError, TypeError):
+                return gr.update(value='')
+            if not isinstance(paths, list) or not paths:
+                return gr.update(value='')
+            outputs_path = os.path.abspath(modules.config.path_outputs)
+            deleted = 0
+            for p in paths:
+                p = os.path.abspath(p)
+                if p.startswith(outputs_path) and os.path.isfile(p):
+                    try:
+                        os.remove(p)
+                        deleted += 1
+                    except OSError:
+                        pass
+            color = '#44ff44' if deleted > 0 else '#ff4444'
+            return gr.update(value=f'<span style="color:{color}">Deleted {deleted} of {len(paths)} files</span>')
+
+        search_delete_request.input(handle_search_delete,
+                                    inputs=[login_state, search_delete_request],
+                                    outputs=[search_status],
+                                    queue=False, show_progress=False)
+
+        # Select All / Delete Selected buttons use JS — wire them
+        _select_all_js = """
+        () => {
+            document.querySelectorAll('#search_results_html .search-cb').forEach(function(cb) {
+                cb.checked = true;
+            });
+            window._searchSelectionChanged();
+        }"""
+        search_select_all_btn.click(fn=lambda: None, _js=_select_all_js,
+                                    queue=False, show_progress=False)
+
+        _delete_selected_js = """
+        () => {
+            var cbs = document.querySelectorAll('#search_results_html .search-cb:checked');
+            if (cbs.length === 0) { alert('No images selected'); return; }
+            if (!confirm('Delete ' + cbs.length + ' selected image(s)? This cannot be undone.')) return;
+            var paths = [];
+            cbs.forEach(function(cb) { paths.push(cb.getAttribute('data-path')); });
+            var el = document.querySelector('#search_delete_request textarea, #search_delete_request input');
+            if (el) {
+                el.value = JSON.stringify(paths);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            // Remove deleted cards from DOM
+            cbs.forEach(function(cb) {
+                var card = cb.closest('.search-card');
+                if (card) card.remove();
+            });
+            window._searchSelectionChanged();
+        }"""
+        search_delete_btn.click(fn=lambda: None, _js=_delete_selected_js,
+                                queue=False, show_progress=False)
 
         def handle_approve_images(paths_text):
             import re
@@ -1898,6 +2435,20 @@ def dump_default_english_config():
 
 
 # dump_default_english_config()
+
+# Start REST API bridge on a separate port for programmatic access (MCP server, etc.)
+try:
+    import api_bridge as _api_bridge_mod
+    _api_bridge_mod.start_bridge_server(port=7866)
+except Exception as _api_err:
+    print(f"API bridge not started: {_api_err}")
+
+# Start gallery browser server
+try:
+    from modules.gallery_server import start_gallery_server
+    start_gallery_server(port=7867)
+except Exception as _gallery_err:
+    print(f"Gallery server not started: {_gallery_err}")
 
 shared.gradio_root.launch(
     inbrowser=args_manager.args.in_browser,

@@ -19,11 +19,44 @@ re_param = re.compile(re_param_code)
 re_imagesize = re.compile(r"^(\d+)x(\d+)$")
 
 
+def _fix_model_stems(data: dict):
+    """Ensure model names have file extensions by matching stems to actual filenames."""
+    def _match_stem(value, filenames):
+        if not value or value in ('', 'None'):
+            return value
+        stem = Path(value).stem
+        # Already has an extension that matches a known file
+        if value in filenames:
+            return value
+        # Try matching by stem
+        for fn in filenames:
+            if Path(fn).stem == stem:
+                return fn
+        return value
+
+    for key in ['base_model', 'refiner_model']:
+        if key in data and data[key]:
+            data[key] = _match_stem(data[key], modules.config.model_filenames)
+    if 'vae' in data and data['vae']:
+        data['vae'] = _match_stem(data['vae'], modules.config.vae_filenames)
+    for key in list(data.keys()):
+        if key.startswith('lora_combined_') and data[key]:
+            val = data[key]
+            if ' : ' in str(val):
+                name, weight = str(val).split(' : ', 1)
+                fixed_name = _match_stem(name, modules.config.lora_filenames)
+                if fixed_name:
+                    data[key] = f'{fixed_name} : {weight}'
+
+
 def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool, inpaint_mode: str):
     loaded_parameter_dict = raw_metadata
     if isinstance(raw_metadata, str):
         loaded_parameter_dict = json.loads(raw_metadata)
     assert isinstance(loaded_parameter_dict, dict)
+
+    # Fix model names that are stems (no extension) — match them to actual filenames
+    _fix_model_stems(loaded_parameter_dict)
 
     results = [len(loaded_parameter_dict) > 0]
 

@@ -1,5 +1,6 @@
 // Camera Fullscreen Preview: shows generated images fullscreen during live camera mode
 // Creates a seamless loop: completed image → live preview → completed image
+// Features: flash on capture, freeze-frame of completed image, countdown timer
 // Uses setInterval polling because Gradio updates img.src attributes directly
 // without DOM childList mutations, so MutationObserver misses them.
 (function() {
@@ -8,9 +9,15 @@
     var overlay = null;
     var fullscreenImg = null;
     var indicator = null;
+    var flashEl = null;
+    var countdownEl = null;
+    var countdownBarEl = null;
     var isActive = false;
     var lastSrc = '';
     var pollTimer = null;
+    var countdownTimer = null;
+    var freezeTimeout = null;
+    var isFrozen = false;  // true while showing freeze-frame of completed image
 
     function createOverlay() {
         if (overlay) return;
@@ -21,6 +28,26 @@
         fullscreenImg = document.createElement('img');
         fullscreenImg.id = 'camera_fullscreen_image';
         overlay.appendChild(fullscreenImg);
+
+        // Flash overlay for capture effect
+        flashEl = document.createElement('div');
+        flashEl.id = 'camera_fullscreen_flash';
+        overlay.appendChild(flashEl);
+
+        // Countdown timer display
+        countdownEl = document.createElement('div');
+        countdownEl.id = 'camera_fullscreen_countdown';
+        countdownEl.style.display = 'none';
+        overlay.appendChild(countdownEl);
+
+        // Countdown progress bar
+        countdownBarEl = document.createElement('div');
+        countdownBarEl.id = 'camera_fullscreen_bar';
+        countdownBarEl.style.display = 'none';
+        var barInner = document.createElement('div');
+        barInner.id = 'camera_fullscreen_bar_inner';
+        countdownBarEl.appendChild(barInner);
+        overlay.appendChild(countdownBarEl);
 
         indicator = document.createElement('div');
         indicator.id = 'camera_fullscreen_indicator';
@@ -46,7 +73,9 @@
         }
         isActive = false;
         lastSrc = '';
+        isFrozen = false;
         stopPolling();
+        stopCountdown();
     }
 
     function startPolling() {
@@ -61,15 +90,80 @@
         }
     }
 
-    // Find the preview image from #preview_image (progress_window component)
-    // Gradio hides components with display:none on their wrapper — we walk up
-    // to check visibility since the elem_id is on the component root but Gradio
-    // may wrap it in an extra container for visibility control.
+    // ---- Flash effect ----
+
+    function triggerFlash() {
+        if (!flashEl) return;
+        // Remove then re-add class to retrigger animation
+        flashEl.classList.remove('flash-active');
+        // Force reflow so removing/adding class works
+        void flashEl.offsetWidth;
+        flashEl.classList.add('flash-active');
+    }
+
+    // ---- Freeze-frame: hold the completed image briefly ----
+
+    function startFreeze() {
+        isFrozen = true;
+        if (freezeTimeout) clearTimeout(freezeTimeout);
+        // Hold the completed image for 1.5 seconds before resuming live preview
+        freezeTimeout = setTimeout(function() {
+            isFrozen = false;
+            freezeTimeout = null;
+        }, 1500);
+    }
+
+    // ---- Countdown timer ----
+
+    function startCountdown(predictedMs) {
+        if (!countdownEl || !countdownBarEl) return;
+        if (predictedMs <= 0) {
+            // No prediction yet — show indeterminate
+            countdownEl.textContent = 'Generating...';
+            countdownEl.style.display = 'block';
+            countdownBarEl.style.display = 'none';
+            return;
+        }
+
+        countdownEl.style.display = 'block';
+        countdownBarEl.style.display = 'block';
+
+        var startTime = Date.now();
+        var barInner = countdownBarEl.querySelector('#camera_fullscreen_bar_inner');
+
+        if (countdownTimer) clearInterval(countdownTimer);
+        countdownTimer = setInterval(function() {
+            var elapsed = Date.now() - startTime;
+            var remaining = Math.max(0, predictedMs - elapsed);
+            var secs = Math.ceil(remaining / 1000);
+
+            if (secs > 0) {
+                countdownEl.textContent = 'Next image in ~' + secs + 's';
+            } else {
+                countdownEl.textContent = 'Almost ready...';
+            }
+
+            // Progress bar: 0% at start → 100% at predicted time
+            var pct = Math.min(100, (elapsed / predictedMs) * 100);
+            if (barInner) barInner.style.width = pct + '%';
+        }, 250);
+    }
+
+    function stopCountdown() {
+        if (countdownTimer) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+        if (countdownEl) countdownEl.style.display = 'none';
+        if (countdownBarEl) countdownBarEl.style.display = 'none';
+    }
+
+    // ---- Image source helpers ----
+
     function getProgressWindowImage() {
         var pw = document.getElementById('preview_image');
         if (!pw) return null;
 
-        // Walk up to check no ancestor is hidden
         var el = pw;
         while (el && el !== document.body) {
             var style = el.style;
@@ -77,17 +171,14 @@
             el = el.parentElement;
         }
 
-        // Find any img inside — Gradio Image components render an <img> when a value is set
         var img = pw.querySelector('img');
         return (img && img.src) ? img : null;
     }
 
-    // Get the latest (first) image from the final gallery
     function getLatestGalleryImage() {
         var gallery = document.getElementById('final_gallery');
         if (!gallery) return null;
 
-        // Check visibility
         var el = gallery;
         while (el && el !== document.body) {
             var style = el.style;
@@ -102,7 +193,8 @@
         return (img && img.src) ? img : null;
     }
 
-    // Core polling function — runs every 150ms while camera is active
+    // ---- Core polling ----
+
     function pollForImages() {
         var cameraActive = window.cameraCapture
             && window.cameraCapture.getState() !== 'IDLE';
@@ -112,7 +204,9 @@
             return;
         }
 
-        // Find best available image: preview frames take priority over gallery
+        // Don't update the image while frozen (showing completed result)
+        if (isFrozen) return;
+
         var previewImg = getProgressWindowImage();
         var galleryImg = getLatestGalleryImage();
         var bestSrc = null;
@@ -126,19 +220,34 @@
         if (!bestSrc) return;
 
         if (!isActive) {
-            // First image appeared — activate fullscreen immediately
             showFullscreen(bestSrc);
             return;
         }
 
-        // Update image if src changed
         if (bestSrc !== lastSrc) {
             fullscreenImg.src = bestSrc;
             lastSrc = bestSrc;
         }
     }
 
-    // Escape key handler — capture phase fires before any other handler
+    // ---- Event listeners for capture lifecycle ----
+
+    // Generation started → show countdown
+    window.addEventListener('livegenerate-start', function(e) {
+        if (!isActive) return;
+        var predictedMs = (e.detail && e.detail.predictedMs) || 0;
+        startCountdown(predictedMs);
+    });
+
+    // Generation finished → flash + freeze + hide countdown
+    window.addEventListener('livegenerate-captured', function() {
+        if (!isActive) return;
+        stopCountdown();
+        triggerFlash();
+        startFreeze();
+    });
+
+    // Escape key handler
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && isActive) {
             e.preventDefault();
@@ -156,7 +265,6 @@
             && window.cameraCapture.getState() !== 'IDLE';
 
         if (cameraActive && !isActive && !pollTimer) {
-            // Camera just became active — start watching for first image
             startPolling();
         } else if (!cameraActive && isActive) {
             hideFullscreen();

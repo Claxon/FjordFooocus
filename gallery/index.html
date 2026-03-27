@@ -1,0 +1,2036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FjordFooocus Gallery</title>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column;
+}
+
+/* ===== Login Overlay ===== */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 9999; background: #1a1a2e;
+  display: flex; align-items: center; justify-content: center;
+}
+.login-overlay.hidden { display: none; }
+.login-box {
+  background: #16213e; border: 1px solid #333; border-radius: 16px;
+  padding: 32px 36px; min-width: 320px; max-width: 400px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.login-box .login-logo {
+  text-align: center; font-size: 22px; font-weight: 700; color: #a78bfa;
+  margin-bottom: 6px;
+}
+.login-box .login-subtitle {
+  text-align: center; font-size: 13px; color: #888; margin-bottom: 24px;
+}
+.login-box label {
+  display: block; font-size: 12px; color: #aaa; margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.login-box input[type="text"], .login-box input[type="password"] {
+  width: 100%; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid #444; background: #0f1629; color: #e0e0e0;
+  font-size: 14px; outline: none; margin-bottom: 16px;
+}
+.login-box input:focus { border-color: #a78bfa; }
+.login-box .login-error {
+  color: #ef4444; font-size: 13px; text-align: center; margin-bottom: 12px;
+  min-height: 20px;
+}
+.login-box .login-btn {
+  width: 100%; padding: 10px; border-radius: 8px; background: #a78bfa;
+  color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  border: none; transition: background 0.15s;
+}
+.login-box .login-btn:hover { background: #8b6fdf; }
+.login-box .login-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Logout button in toolbar */
+.toolbar .logout-btn {
+  padding: 3px 10px; border-radius: 16px; font-size: 12px;
+  background: #2a2a4a; color: #aaa; cursor: pointer; transition: background 0.15s;
+  white-space: nowrap; margin-left: auto;
+}
+.toolbar .logout-btn:hover { background: #4a1a1a; color: #ff6b6b; }
+.toolbar .user-label {
+  font-size: 12px; color: #888; white-space: nowrap;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #1a1a2e; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+button { cursor: pointer; border: none; background: none; color: inherit; font: inherit; }
+input, select { font: inherit; color: inherit; }
+
+/* ===== Header / Toolbar ===== */
+.toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+  background: #16213e; border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap;
+}
+.toolbar .logo { font-weight: 700; font-size: 14px; color: #a78bfa; white-space: nowrap; }
+
+/* Capsule filter system */
+.filter-bar {
+  display: flex; align-items: center; gap: 5px; flex: 1; flex-wrap: wrap; min-width: 0;
+}
+.capsule {
+  display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px 3px 10px;
+  border-radius: 16px; font-size: 12px; white-space: nowrap; cursor: default;
+  transition: background 0.15s;
+}
+.capsule .cap-label { opacity: 0.6; margin-right: 2px; }
+.capsule .cap-remove {
+  width: 16px; height: 16px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-size: 12px; line-height: 1;
+  opacity: 0.5; cursor: pointer; transition: opacity 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.capsule .cap-remove:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+.capsule.date    { background: #1e3a5f; color: #7dd3fc; }
+.capsule.profile { background: #3b1f5e; color: #c4b5fd; }
+.capsule.topic   { background: #1e3b2f; color: #86efac; }
+.capsule.rating  { background: #3b2f1e; color: #fcd34d; }
+.capsule.search  { background: #3b1e1e; color: #fca5a5; }
+.capsule.starred { background: #3b351e; color: #fde68a; }
+.capsule.safe    { background: #1e3b1e; color: #86efac; }
+
+/* Add-filter dropdown */
+.add-filter-wrap { position: relative; }
+.add-filter-btn {
+  padding: 3px 10px; border-radius: 16px; font-size: 12px;
+  background: #2a2a4a; color: #aaa; cursor: pointer; transition: background 0.15s;
+  white-space: nowrap;
+}
+.add-filter-btn:hover { background: #3a3a5a; color: #ddd; }
+.filter-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: #1e2a4a; border: 1px solid #444; border-radius: 8px;
+  min-width: 220px; max-height: 320px; overflow-y: auto; z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 4px 0;
+}
+.filter-dropdown.open { display: block; }
+.fd-section { padding: 4px 0; }
+.fd-section:not(:last-child) { border-bottom: 1px solid #333; }
+.fd-section-title {
+  padding: 4px 12px; font-size: 10px; color: #888;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.fd-item {
+  padding: 6px 12px; font-size: 13px; cursor: pointer;
+  transition: background 0.1s; display: flex; align-items: center; gap: 6px;
+}
+.fd-item:hover { background: rgba(255,255,255,0.06); }
+.fd-item.active { color: #a78bfa; }
+.fd-item .fd-check { width: 14px; text-align: center; font-size: 11px; }
+
+/* Search within toolbar */
+.toolbar-search {
+  width: 180px; padding: 4px 8px; border-radius: 16px;
+  border: 1px solid #444; background: #0f1629; outline: none; font-size: 12px;
+}
+.toolbar-search:focus { border-color: #a78bfa; width: 240px; transition: width 0.2s; }
+
+/* ===== Day Navigation ===== */
+.day-nav {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 12px; background: #1a1a2e; border-bottom: 1px solid #2a2a4a; flex-shrink: 0;
+}
+.day-nav button {
+  padding: 4px 12px; border-radius: 6px; background: #16213e; font-size: 18px;
+  transition: background 0.15s;
+}
+.day-nav button:hover { background: #2a3a5e; }
+.day-nav button:disabled { opacity: 0.3; cursor: default; }
+.day-label {
+  font-size: 15px; font-weight: 600; min-width: 200px; text-align: center;
+}
+.day-label .today-tag { color: #a78bfa; font-size: 12px; margin-left: 6px; }
+.day-count { font-size: 12px; color: #888; margin-left: 4px; }
+.day-label { cursor: pointer; }
+.day-label:hover { color: #a78bfa; }
+
+/* ===== Calendar Popup ===== */
+.calendar-overlay {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.4); align-items: flex-start; justify-content: center;
+  padding-top: 80px;
+}
+.calendar-overlay.open { display: flex; }
+.calendar {
+  background: #16213e; border: 1px solid #444; border-radius: 12px;
+  padding: 16px; min-width: 320px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  user-select: none;
+}
+.cal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.cal-header .cal-title { font-size: 15px; font-weight: 600; }
+.cal-header button {
+  width: 28px; height: 28px; border-radius: 6px; background: #2a2a4a;
+  font-size: 16px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.cal-header button:hover { background: #3a3a6a; }
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.cal-dow {
+  text-align: center; font-size: 10px; color: #666; padding: 4px 0;
+  text-transform: uppercase;
+}
+.cal-day {
+  text-align: center; padding: 6px 2px; border-radius: 6px; font-size: 13px;
+  cursor: default; position: relative; min-height: 38px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.cal-day.other-month { color: #444; }
+.cal-day.has-images {
+  cursor: pointer; color: #e0e0e0; background: rgba(167,139,250,0.08);
+}
+.cal-day.has-images:hover { background: rgba(167,139,250,0.2); }
+.cal-day.current {
+  outline: 2px solid #a78bfa; outline-offset: -2px; border-radius: 6px;
+}
+.cal-day.today { color: #a78bfa; font-weight: 700; }
+.cal-day .cal-count {
+  font-size: 9px; color: #888; line-height: 1;
+}
+.cal-day.has-images .cal-count { color: #a78bfa; }
+.cal-day .cal-bar {
+  width: 100%; height: 3px; border-radius: 2px; margin-top: 2px;
+  background: transparent;
+}
+.cal-day.has-images .cal-bar { background: #a78bfa; }
+.cal-day.has-images.q1 .cal-bar { background: #6d5aad; }
+.cal-day.has-images.q2 .cal-bar { background: #8b6fc0; }
+.cal-day.has-images.q3 .cal-bar { background: #a78bfa; }
+.cal-day.has-images.q4 .cal-bar { background: #c4b5fd; }
+
+/* ===== Thumbnail Grid ===== */
+.grid-container {
+  flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px;
+}
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.thumb-card {
+  position: relative; border-radius: 8px; overflow: hidden;
+  background: #0f1629; cursor: pointer; aspect-ratio: 1;
+  transition: transform 0.1s, box-shadow 0.15s; border: 2px solid transparent;
+}
+.thumb-card:hover { transform: scale(1.02); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.thumb-card.selected { border-color: #a78bfa; box-shadow: 0 0 0 2px #a78bfa44; }
+.thumb-card img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  background: #0a0a1a;
+}
+.thumb-card img[data-src] { opacity: 0; transition: opacity 0.3s; }
+.thumb-card img.loaded { opacity: 1; }
+
+/* Thumb overlays */
+.thumb-star {
+  position: absolute; top: 6px; right: 6px; font-size: 20px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8); z-index: 2; padding: 2px;
+  transition: transform 0.15s;
+}
+.thumb-star:hover { transform: scale(1.3); }
+.thumb-star.starred { color: #ffd700; }
+.thumb-star:not(.starred) { color: rgba(255,255,255,0.4); }
+.thumb-rating {
+  position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 3px; z-index: 2;
+}
+.thumb-rating .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.15);
+  transition: background 0.15s;
+}
+.thumb-rating .dot.r1 { background: #ef4444; }
+.thumb-rating .dot.r2 { background: #f97316; }
+.thumb-rating .dot.r3 { background: #eab308; }
+.thumb-rating .dot.r4 { background: #84cc16; }
+.thumb-rating .dot.r5 { background: #22c55e; }
+.thumb-info-btn {
+  position: absolute; bottom: 6px; right: 6px; font-size: 14px; width: 22px; height: 22px;
+  border-radius: 50%; background: rgba(0,0,0,0.5); color: rgba(255,255,255,0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 2;
+  opacity: 0; transition: opacity 0.15s;
+}
+.thumb-card:hover .thumb-info-btn { opacity: 1; }
+.thumb-info-btn:hover { background: rgba(167,139,250,0.5); color: #fff; }
+.thumb-topic {
+  position: absolute; top: 6px; left: 6px; font-size: 10px; padding: 1px 5px;
+  background: rgba(0,0,0,0.6); border-radius: 3px; color: #aaa; z-index: 2;
+}
+.thumb-checkbox {
+  position: absolute; top: 6px; left: 6px; width: 20px; height: 20px;
+  border: 2px solid rgba(255,255,255,0.5); border-radius: 4px;
+  background: rgba(0,0,0,0.4); z-index: 3; display: none;
+  align-items: center; justify-content: center; font-size: 14px;
+}
+.select-mode .thumb-checkbox { display: flex; }
+.select-mode .thumb-topic { display: none; }
+.thumb-card.selected .thumb-checkbox { background: #a78bfa; border-color: #a78bfa; }
+
+/* ===== Batch actions (inline in toolbar) ===== */
+.batch-actions {
+  display: none; align-items: center; gap: 6px; flex: 1; min-width: 0;
+}
+.select-mode .batch-actions { display: flex; }
+.select-mode .filter-bar { display: none; }
+.select-mode .toolbar-search { display: none; }
+.batch-actions .count { font-size: 13px; color: #a78bfa; font-weight: 600; white-space: nowrap; }
+.batch-btn {
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  transition: background 0.15s; white-space: nowrap;
+}
+.batch-btn.star-btn { background: #2a2a4a; }
+.batch-btn.star-btn:hover { background: #3a3a5a; }
+.batch-btn.rate-btn { background: #2a2a4a; min-width: 28px; text-align: center; }
+.batch-btn.rate-btn:hover { background: #3a3a5a; }
+.batch-btn.delete-btn { background: #4a1a1a; color: #ff6b6b; }
+.batch-btn.delete-btn:hover { background: #6a2a2a; }
+.batch-btn.select-all-btn { background: #2a2a4a; }
+.batch-btn.select-all-btn:hover { background: #3a3a5a; }
+.select-toggle {
+  padding: 5px 12px; border-radius: 6px; font-size: 13px;
+  background: #2a2a4a; transition: background 0.15s;
+}
+.select-toggle:hover { background: #3a3a5a; }
+.select-toggle.active { background: #a78bfa33; color: #a78bfa; }
+
+/* ===== Bottom status bar ===== */
+.status-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 12px; background: #16213e; border-top: 1px solid #333;
+  font-size: 11px; color: #888; flex-shrink: 0;
+}
+
+/* ===== Hover preview ===== */
+.hover-preview {
+  position: fixed; bottom: 36px; right: 12px; z-index: 90;
+  max-width: 280px; max-height: 280px; border-radius: 8px;
+  border: 1px solid #444; background: #0f1629;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  pointer-events: none; opacity: 0; transition: opacity 0.15s;
+  overflow: hidden;
+}
+.hover-preview.visible { opacity: 1; }
+.select-mode .hover-preview { display: none; }
+.hover-preview img {
+  display: block; max-width: 280px; max-height: 280px; object-fit: contain;
+}
+
+/* ===== Last-viewed highlight ===== */
+.thumb-card.last-viewed {
+  box-shadow: 0 0 0 2px #a78bfa88, 0 4px 16px rgba(167,139,250,0.3);
+}
+
+/* ===== Fullscreen Modal ===== */
+.fullscreen-overlay {
+  display: none; position: fixed; inset: 0; z-index: 1000;
+  background: rgba(10, 10, 20, 0.97); flex-direction: column;
+}
+.fullscreen-overlay.open { display: flex; }
+.fs-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: rgba(0,0,0,0.5); z-index: 2;
+}
+.fs-header .fs-filename { font-size: 13px; color: #ccc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-btn {
+  padding: 4px 8px; border-radius: 4px; font-size: 16px; opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+}
+.fs-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+.fs-btn.starred { color: #ffd700; opacity: 1; }
+.fs-btn.delete-btn:hover { color: #ff6b6b; }
+.fs-image-container {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+}
+.fs-image-container img {
+  max-width: 100%; max-height: 100%; object-fit: contain; user-select: none;
+  -webkit-user-drag: none;
+}
+.fs-nav-btn {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: 32px; padding: 16px 12px; z-index: 3; opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.fs-nav-btn:hover { opacity: 0.9; }
+.fs-nav-btn.prev { left: 0; }
+.fs-nav-btn.next { right: 0; }
+.fs-rating-bar {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 8px; background: rgba(0,0,0,0.5); z-index: 2;
+}
+.fs-rating-btn {
+  width: 36px; height: 36px; border-radius: 50%; font-size: 16px; font-weight: 700;
+  background: #2a2a4a; transition: background 0.15s, transform 0.1s;
+}
+.fs-rating-btn:hover { transform: scale(1.1); }
+.fs-rating-btn[data-r="1"] { border: 2px solid #ef4444; }
+.fs-rating-btn[data-r="2"] { border: 2px solid #f97316; }
+.fs-rating-btn[data-r="3"] { border: 2px solid #eab308; }
+.fs-rating-btn[data-r="4"] { border: 2px solid #84cc16; }
+.fs-rating-btn[data-r="5"] { border: 2px solid #22c55e; }
+.fs-rating-btn[data-r="1"]:hover, .fs-rating-btn[data-r="1"].active { background: #ef4444; color: #fff; }
+.fs-rating-btn[data-r="2"]:hover, .fs-rating-btn[data-r="2"].active { background: #f97316; color: #fff; }
+.fs-rating-btn[data-r="3"]:hover, .fs-rating-btn[data-r="3"].active { background: #eab308; color: #fff; }
+.fs-rating-btn[data-r="4"]:hover, .fs-rating-btn[data-r="4"].active { background: #84cc16; color: #fff; }
+.fs-rating-btn[data-r="5"]:hover, .fs-rating-btn[data-r="5"].active { background: #22c55e; color: #fff; }
+/* Fullscreen with info panel open: image shrinks to make room */
+.fullscreen-overlay.info-open .fs-image-container { margin-right: 380px; }
+@media (max-width: 800px) { .fullscreen-overlay.info-open .fs-image-container { margin-right: 0; } }
+
+/* Mobile rating overlay */
+.fs-rating-overlay {
+  position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; padding: 10px 16px; border-radius: 12px;
+  background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 5;
+}
+.fs-rating-overlay.visible { opacity: 1; pointer-events: auto; }
+.fs-rating-overlay .fs-rating-btn { width: 44px; height: 44px; font-size: 18px; }
+
+/* ===== Info Panel ===== */
+.info-panel {
+  position: fixed; top: 0; right: -400px; width: 380px; max-width: 90vw; height: 100%;
+  background: #16213e; z-index: 1010; transition: right 0.25s ease;
+  overflow-y: auto; border-left: 1px solid #333; display: flex; flex-direction: column;
+}
+.info-panel.open { right: 0; }
+/* Info panel backdrop for thumbnail context (closes on click) */
+.info-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 1009; background: rgba(0,0,0,0.3);
+}
+.info-backdrop.open { display: block; }
+.info-panel .info-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px; border-bottom: 1px solid #333; flex-shrink: 0;
+}
+.info-panel .info-header h3 { font-size: 14px; font-weight: 600; }
+.info-content { padding: 12px; flex: 1; overflow-y: auto; }
+.info-content .meta-row {
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #1a1a2e;
+}
+.info-content .meta-key {
+  font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.info-content .meta-val {
+  font-size: 13px; word-break: break-word; white-space: pre-wrap;
+  max-height: 120px; overflow-y: auto;
+}
+
+/* ===== Loading / Empty states ===== */
+.loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
+.empty-state { text-align: center; padding: 60px 20px; color: #555; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
+
+/* ===== Confirm dialog ===== */
+.confirm-overlay {
+  display: none; position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+}
+.confirm-overlay.open { display: flex; }
+.confirm-box {
+  background: #1e2a4a; padding: 24px; border-radius: 12px; max-width: 360px;
+  text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.confirm-box p { margin-bottom: 16px; font-size: 14px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: center; }
+.confirm-actions button {
+  padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 500;
+}
+.confirm-actions .confirm-yes { background: #cc3333; color: #fff; }
+.confirm-actions .confirm-yes:hover { background: #dd4444; }
+.confirm-actions .confirm-no { background: #333; }
+.confirm-actions .confirm-no:hover { background: #444; }
+
+/* ===== Slideshow ===== */
+.slideshow-controls {
+  display: flex; align-items: center; gap: 8px; padding: 0 8px;
+}
+.slideshow-btn {
+  padding: 4px 10px; border-radius: 4px; font-size: 13px; background: #2a2a4a;
+  transition: background 0.15s;
+}
+.slideshow-btn:hover { background: #3a3a6a; }
+.slideshow-btn.active { background: #a78bfa; color: #fff; }
+.slideshow-speed {
+  width: 50px; padding: 2px 4px; border-radius: 4px; border: 1px solid #444;
+  background: #0f1629; text-align: center; font-size: 12px;
+}
+.fs-image-container img { transition: opacity 0.4s ease; }
+.fs-image-container img.fading { opacity: 0; }
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px; }
+  .toolbar { padding: 6px 8px; gap: 4px; }
+  .toolbar .logo { display: none; }
+  .batch-actions { flex-wrap: wrap; }
+  .batch-btn { padding: 3px 7px; font-size: 11px; }
+  .day-nav { padding: 6px 8px; }
+  .fs-nav-btn { font-size: 24px; padding: 12px 8px; }
+  .fs-rating-bar { display: none; }
+  .hover-preview { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Login Overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">FjordFooocus Gallery</div>
+    <div class="login-subtitle">Sign in to view your images</div>
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="login-error" id="loginError"></div>
+    <button class="login-btn" id="loginBtn">Login</button>
+    <button class="login-btn" id="guestBtn" style="margin-top:8px;background:#2a2a4a;color:#aaa;">Continue as Guest</button>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <span class="logo">FjordFooocus Gallery</span>
+  <div class="filter-bar" id="filterBar">
+    <!-- Capsules rendered dynamically -->
+    <div class="add-filter-wrap">
+      <button class="add-filter-btn" id="addFilterBtn">+ Filter</button>
+      <div class="filter-dropdown" id="filterDropdown"></div>
+    </div>
+  </div>
+  <div class="batch-actions" id="batchActions">
+    <span class="count" id="batchCount">0 selected</span>
+    <button class="batch-btn select-all-btn" id="batchSelectAll">All</button>
+    <button class="batch-btn star-btn" id="batchStar">&#9733;</button>
+    <button class="batch-btn rate-btn" id="batchRate1" title="Rate 1">1</button>
+    <button class="batch-btn rate-btn" id="batchRate2" title="Rate 2">2</button>
+    <button class="batch-btn rate-btn" id="batchRate3" title="Rate 3">3</button>
+    <button class="batch-btn rate-btn" id="batchRate4" title="Rate 4">4</button>
+    <button class="batch-btn rate-btn" id="batchRate5" title="Rate 5">5</button>
+    <button class="batch-btn delete-btn" id="batchDelete" title="Delete (Del)">Delete</button>
+  </div>
+  <input type="text" class="toolbar-search" id="searchInput" placeholder="Search...">
+  <button class="select-toggle" id="selectToggle" title="Multi-select (Ctrl+click) / Esc to cancel">Select</button>
+  <span class="user-label" id="userLabel"></span>
+  <button class="logout-btn" id="logoutBtn">Logout</button>
+</div>
+
+<!-- Day Navigation -->
+<div class="day-nav">
+  <button id="prevDay" title="Previous day">&lsaquo;</button>
+  <span class="day-label" id="dayLabel">Loading...</span>
+  <button id="nextDay" title="Next day">&rsaquo;</button>
+</div>
+
+<!-- Calendar Popup -->
+<div class="calendar-overlay" id="calendarOverlay">
+  <div class="calendar" id="calendarPopup">
+    <div class="cal-header">
+      <button id="calPrevMonth">&lsaquo;</button>
+      <span class="cal-title" id="calTitle"></span>
+      <button id="calNextMonth">&rsaquo;</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+</div>
+
+<!-- Grid -->
+<div class="grid-container" id="gridContainer">
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- Hover Preview -->
+<div class="hover-preview" id="hoverPreview"><img id="hoverPreviewImg" alt=""></div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+  <span id="statusText"></span>
+  <span id="statusRight"></span>
+</div>
+
+<!-- Fullscreen Overlay -->
+<div class="fullscreen-overlay" id="fullscreen">
+  <div class="fs-header">
+    <span class="fs-filename" id="fsFilename"></span>
+    <div class="slideshow-controls">
+      <button class="slideshow-btn" id="slideshowToggle" title="Slideshow (P)">&#9654; Play</button>
+      <input type="number" class="slideshow-speed" id="slideshowSpeed" value="3" min="1" max="60" title="Seconds between images">
+      <span style="font-size:11px;color:#888">sec</span>
+    </div>
+    <button class="fs-btn" id="fsRegenerate" title="Regenerate">&#x21bb;</button>
+    <button class="fs-btn" id="fsStar" title="Star (F)">&#9734;</button>
+    <button class="fs-btn" id="fsInfo" title="Info (I)">&#9432;</button>
+    <button class="fs-btn delete-btn" id="fsDelete" title="Delete (Del)">&#128465;</button>
+    <button class="fs-btn" id="fsClose" title="Close (Esc)">&times;</button>
+  </div>
+  <div class="fs-image-container" id="fsImageContainer">
+    <button class="fs-nav-btn prev" id="fsPrev">&lsaquo;</button>
+    <img id="fsImage" src="" alt="">
+    <button class="fs-nav-btn next" id="fsNext">&rsaquo;</button>
+    <div class="fs-rating-overlay" id="fsRatingOverlay">
+      <button class="fs-rating-btn" data-r="1">1</button>
+      <button class="fs-rating-btn" data-r="2">2</button>
+      <button class="fs-rating-btn" data-r="3">3</button>
+      <button class="fs-rating-btn" data-r="4">4</button>
+      <button class="fs-rating-btn" data-r="5">5</button>
+    </div>
+  </div>
+  <div class="fs-rating-bar" id="fsRatingBar">
+    <button class="fs-rating-btn" data-r="1">1</button>
+    <button class="fs-rating-btn" data-r="2">2</button>
+    <button class="fs-rating-btn" data-r="3">3</button>
+    <button class="fs-rating-btn" data-r="4">4</button>
+    <button class="fs-rating-btn" data-r="5">5</button>
+  </div>
+</div>
+
+<!-- Info Backdrop (for thumbnail info popup - click to close) -->
+<div class="info-backdrop" id="infoBackdrop"></div>
+
+<!-- Info Panel -->
+<div class="info-panel" id="infoPanel">
+  <div class="info-header">
+    <h3>Image Info</h3>
+    <button class="fs-btn" id="infoPanelClose">&times;</button>
+  </div>
+  <div class="info-content" id="infoContent"></div>
+</div>
+
+<!-- Confirm Dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMsg">Are you sure?</p>
+    <div class="confirm-actions">
+      <button class="confirm-no" id="confirmNo">Cancel</button>
+      <button class="confirm-yes" id="confirmYes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+// ===== State =====
+const API = window.location.origin;
+let loggedInUser = null; // current authenticated username
+let allDates = [];     // [{date, count}]
+let currentDateIdx = 0;
+let currentImages = []; // [{path, filename, topic, date, rating, starred, ...}]
+let fsIndex = -1;       // fullscreen image index
+let selectMode = false;
+let selectedPaths = new Set();
+let hoveredCard = null;
+let confirmCallback = null;
+let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+let longPressTimer = null;
+let ratingOverlayTimer = null;
+let lastSelectedIdx = -1;
+let slideshowTimer = null;
+let slideshowActive = false;
+let infoPanelContext = null;
+let infoPanelImagePath = null;
+let calViewDate = null; // Date object for the calendar month being viewed
+
+// Filter capsule state
+let availableTopics = [];
+let filters = {
+  dateRange: 'all',
+  topics: [],            // empty = all
+  ratings: [],           // e.g. ['3+','starred']
+  search: '',
+  safeMode: true,        // hide NSFW images by default
+};
+
+// ===== DOM refs =====
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+const dom = {
+  loginOverlay: $('#loginOverlay'), loginUser: $('#loginUser'), loginPass: $('#loginPass'),
+  loginBtn: $('#loginBtn'), guestBtn: $('#guestBtn'), loginError: $('#loginError'),
+  userLabel: $('#userLabel'), logoutBtn: $('#logoutBtn'),
+  searchInput: $('#searchInput'), selectToggle: $('#selectToggle'),
+  filterBar: $('#filterBar'), addFilterBtn: $('#addFilterBtn'), filterDropdown: $('#filterDropdown'),
+  prevDay: $('#prevDay'), nextDay: $('#nextDay'), dayLabel: $('#dayLabel'),
+  grid: $('#grid'), gridContainer: $('#gridContainer'),
+  batchActions: $('#batchActions'), batchCount: $('#batchCount'),
+  hoverPreview: $('#hoverPreview'), hoverPreviewImg: $('#hoverPreviewImg'),
+  statusText: $('#statusText'), statusRight: $('#statusRight'),
+  fullscreen: $('#fullscreen'), fsImage: $('#fsImage'), fsFilename: $('#fsFilename'),
+  fsStar: $('#fsStar'), fsDelete: $('#fsDelete'), fsInfo: $('#fsInfo'),
+  fsClose: $('#fsClose'), fsPrev: $('#fsPrev'), fsNext: $('#fsNext'),
+  fsRegenerate: $('#fsRegenerate'), fsRatingBar: $('#fsRatingBar'),
+  fsRatingOverlay: $('#fsRatingOverlay'), fsImageContainer: $('#fsImageContainer'),
+  infoPanel: $('#infoPanel'), infoContent: $('#infoContent'),
+  confirmOverlay: $('#confirmOverlay'), confirmMsg: $('#confirmMsg'),
+  batchSelectAll: $('#batchSelectAll'),
+  slideshowToggle: $('#slideshowToggle'), slideshowSpeed: $('#slideshowSpeed'),
+  infoBackdrop: $('#infoBackdrop'),
+  calendarOverlay: $('#calendarOverlay'), calendarPopup: $('#calendarPopup'),
+  calGrid: $('#calGrid'), calTitle: $('#calTitle'),
+  calPrevMonth: $('#calPrevMonth'), calNextMonth: $('#calNextMonth'),
+};
+
+// ===== API helpers =====
+async function api(path, opts) {
+  const res = await fetch(API + path, { credentials: 'same-origin', ...opts });
+  if (res.status === 401) {
+    loggedInUser = null;
+    showLoginPage();
+    throw new Error('Not authenticated');
+  }
+  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+async function apiPost(path, body) {
+  return api(path, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+}
+
+// ===== Auth =====
+function showLoginPage() {
+  dom.loginOverlay.classList.remove('hidden');
+  dom.loginError.textContent = '';
+  dom.loginUser.value = '';
+  dom.loginPass.value = '';
+  dom.loginUser.focus();
+}
+
+function hideLoginPage() {
+  dom.loginOverlay.classList.add('hidden');
+}
+
+async function doLogin() {
+  const username = dom.loginUser.value.trim();
+  const password = dom.loginPass.value;
+  if (!username || !password) {
+    dom.loginError.textContent = 'Username and password are required.';
+    return;
+  }
+  dom.loginBtn.disabled = true;
+  dom.loginError.textContent = '';
+  try {
+    const res = await fetch(API + '/api/login', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      dom.loginError.textContent = data.detail || 'Login failed.';
+      return;
+    }
+    loggedInUser = data.username;
+    dom.userLabel.textContent = loggedInUser;
+    hideLoginPage();
+    await loadGallery();
+  } catch (e) {
+    dom.loginError.textContent = 'Connection error. Is the server running?';
+  } finally {
+    dom.loginBtn.disabled = false;
+  }
+}
+
+async function doGuest() {
+  dom.guestBtn.disabled = true;
+  dom.loginError.textContent = '';
+  try {
+    const res = await fetch(API + '/api/guest', {
+      method: 'POST', credentials: 'same-origin',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      dom.loginError.textContent = data.detail || 'Guest login failed.';
+      return;
+    }
+    loggedInUser = data.username;
+    dom.userLabel.textContent = loggedInUser;
+    hideLoginPage();
+    await loadGallery();
+  } catch (e) {
+    dom.loginError.textContent = 'Connection error.';
+  } finally {
+    dom.guestBtn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  try { await apiPost('/api/logout', {}); } catch (e) { /* ignore */ }
+  loggedInUser = null;
+  showLoginPage();
+}
+
+async function checkAuth() {
+  try {
+    const res = await fetch(API + '/api/me', { credentials: 'same-origin' });
+    const data = await res.json();
+    if (data.authenticated) {
+      loggedInUser = data.username;
+      dom.userLabel.textContent = loggedInUser;
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+function thumbUrl(path) { return `${API}/api/thumbnail?path=${encodeURIComponent(path)}&size=300`; }
+function imageUrl(path) { return `${API}/api/image?path=${encodeURIComponent(path)}`; }
+
+// ===== Date range helpers =====
+function getDateRange() {
+  const today = new Date();
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const r = filters.dateRange;
+  if (r === 'today') return { from: fmt(today), to: fmt(today), label: 'Today' };
+  if (r === 'yesterday') { const d = new Date(today); d.setDate(d.getDate()-1); return { from: fmt(d), to: fmt(d), label: 'Yesterday' }; }
+  if (r === 'week') { const d = new Date(today); d.setDate(d.getDate()-6); return { from: fmt(d), to: fmt(today), label: 'Last 7 days' }; }
+  if (r === 'month') { const d = new Date(today); d.setDate(d.getDate()-29); return { from: fmt(d), to: fmt(today), label: 'Last 30 days' }; }
+  if (r === 'all') return { from: null, to: null, label: 'All time' };
+  // Custom: 'YYYY-MM-DD:YYYY-MM-DD'
+  if (r.includes(':')) { const [f, t] = r.split(':'); return { from: f, to: t, label: `${f} to ${t}` }; }
+  return { from: null, to: null, label: 'All time' };
+}
+
+function buildApiParams() {
+  const params = new URLSearchParams();
+  const dr = getDateRange();
+  if (dr.from) params.set('date_from', dr.from);
+  if (dr.to) params.set('date_to', dr.to);
+  if (filters.topics.length > 0) params.set('topics', filters.topics.join(','));
+  if (filters.safeMode) params.set('safe_mode', 'true');
+  return params;
+}
+
+// ===== Init =====
+async function init() {
+  // Setup login event listeners
+  dom.loginBtn.addEventListener('click', doLogin);
+  dom.guestBtn.addEventListener('click', doGuest);
+  dom.loginPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  dom.loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') dom.loginPass.focus(); });
+  dom.logoutBtn.addEventListener('click', doLogout);
+
+  // Check if already authenticated (cookie exists)
+  const authed = await checkAuth();
+  if (!authed) {
+    showLoginPage();
+    return;
+  }
+  hideLoginPage();
+  await loadGallery();
+}
+
+async function loadGallery() {
+  await loadAvailableData();
+  renderCapsules();
+  setupEventListeners();
+  readHashState();
+}
+
+async function loadAvailableData() {
+  try {
+    availableTopics = await api('/api/topics');
+  } catch (e) {
+    console.error('Failed to load available data:', e);
+  }
+}
+
+async function loadDates() {
+  try {
+    if (filters.search) {
+      // When searching, fetch all results and derive dates from them
+      const params = buildApiParams();
+      const results = await api(`/api/search?q=${encodeURIComponent(filters.search)}&${params}&limit=500`);
+      // Group by date to build allDates
+      const dateCounts = {};
+      results.forEach(r => {
+        dateCounts[r.date] = (dateCounts[r.date] || 0) + 1;
+      });
+      allDates = Object.entries(dateCounts)
+        .map(([d, c]) => ({ date: d, count: c }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+    } else {
+      const params = buildApiParams();
+      allDates = await api(`/api/dates?${params}`);
+    }
+    if (allDates.length === 0) {
+      currentDateIdx = -1;
+      showEmpty('No images found for these filters');
+      updateDayNav();
+      return;
+    }
+    currentDateIdx = 0;
+    updateDayNav();
+    await loadCurrentDay();
+  } catch (e) {
+    console.error('Failed to load dates:', e);
+    showEmpty('Error loading dates');
+  }
+}
+
+async function loadCurrentDay() {
+  if (currentDateIdx < 0 || currentDateIdx >= allDates.length) {
+    showEmpty('No images');
+    return;
+  }
+  const dateInfo = allDates[currentDateIdx];
+  const params = buildApiParams();
+  params.delete('date_from'); params.delete('date_to');
+  dom.grid.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    if (filters.search) {
+      // Use search endpoint filtered to this specific date
+      params.set('date_from', dateInfo.date);
+      params.set('date_to', dateInfo.date);
+      currentImages = await api(`/api/search?q=${encodeURIComponent(filters.search)}&${params}`);
+    } else {
+      params.set('date', dateInfo.date);
+      currentImages = await api(`/api/images?${params}`);
+    }
+    renderGrid(applyLocalFilters(currentImages));
+    updateHash();
+  } catch (e) {
+    console.error('Failed to load images:', e);
+    showEmpty('Error loading images');
+  }
+}
+
+function applyLocalFilters(images) {
+  let result = images;
+  // Rating filters
+  for (const rf of filters.ratings) {
+    if (rf === 'starred') result = result.filter(i => i.starred);
+    else if (rf === 'unrated') result = result.filter(i => !i.rating || i.rating === 0);
+    else if (rf.endsWith('+')) {
+      const min = parseInt(rf);
+      result = result.filter(i => i.rating >= min);
+    } else if (rf === '5') {
+      result = result.filter(i => i.rating === 5);
+    }
+  }
+  return result;
+}
+
+// ===== Capsule rendering =====
+const DATE_PRESETS = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'week', label: 'Last 7 days' },
+  { key: 'month', label: 'Last 30 days' },
+  { key: 'all', label: 'All time' },
+];
+const RATING_OPTIONS = [
+  { key: '5', label: '5 only' },
+  { key: '4+', label: '4+' },
+  { key: '3+', label: '3+' },
+  { key: '2+', label: '2+' },
+  { key: '1+', label: '1+' },
+  { key: 'unrated', label: 'Unrated' },
+  { key: 'starred', label: 'Starred' },
+];
+
+function renderCapsules() {
+  // Remove existing capsules (keep add-filter-wrap)
+  dom.filterBar.querySelectorAll('.capsule').forEach(c => c.remove());
+  const addWrap = dom.filterBar.querySelector('.add-filter-wrap');
+
+  // Topic capsules
+  filters.topics.forEach(t => {
+    addCapsule('topic', t, () => { filters.topics = filters.topics.filter(x => x !== t); onFiltersChanged(); }, addWrap);
+  });
+
+  // Rating capsules
+  filters.ratings.forEach(r => {
+    const label = RATING_OPTIONS.find(o => o.key === r)?.label || r;
+    const cls = r === 'starred' ? 'starred' : 'rating';
+    addCapsule(cls, label, () => { filters.ratings = filters.ratings.filter(x => x !== r); onFiltersChanged(); }, addWrap);
+  });
+
+  // Safe mode capsule
+  if (filters.safeMode) {
+    addCapsule('safe', 'Safe Mode', () => { filters.safeMode = false; onFiltersChanged(); }, addWrap);
+  }
+
+  // Search capsule
+  if (filters.search) {
+    addCapsule('search', `"${filters.search}"`, () => { filters.search = ''; dom.searchInput.value = ''; onFiltersChanged(); }, addWrap);
+  }
+}
+
+function addCapsule(type, text, onRemove, beforeEl) {
+  const cap = document.createElement('span');
+  cap.className = `capsule ${type}`;
+  const labelMap = { topic: 'Topic', rating: 'Rating', starred: '', search: 'Search', safe: 'Mode' };
+  const labelText = labelMap[type] || '';
+  cap.innerHTML = (labelText ? `<span class="cap-label">${labelText}:</span>` : '') + escHtml(text);
+  {
+    const rm = document.createElement('span');
+    rm.className = 'cap-remove';
+    rm.textContent = '\u00d7';
+    rm.addEventListener('click', (e) => { e.stopPropagation(); onRemove(); });
+    cap.appendChild(rm);
+  }
+  dom.filterBar.insertBefore(cap, beforeEl);
+}
+
+function onFiltersChanged() {
+  renderCapsules();
+  loadDates();
+}
+
+// ===== Filter dropdown =====
+function renderFilterDropdown() {
+  let html = '';
+
+  // Topic section
+  const relevantTopics = availableTopics;
+  if (relevantTopics.length > 0) {
+    html += '<div class="fd-section"><div class="fd-section-title">Topics</div>';
+    relevantTopics.forEach(t => {
+      const active = filters.topics.includes(t) ? ' active' : '';
+      html += `<div class="fd-item${active}" data-action="topic" data-value="${t}"><span class="fd-check">${active ? '\u2713' : ''}</span>${t}</div>`;
+    });
+    html += '</div>';
+  }
+
+  // Rating section
+  html += '<div class="fd-section"><div class="fd-section-title">Rating</div>';
+  RATING_OPTIONS.forEach(r => {
+    const active = filters.ratings.includes(r.key) ? ' active' : '';
+    html += `<div class="fd-item${active}" data-action="rating" data-value="${r.key}"><span class="fd-check">${active ? '\u2713' : ''}</span>${r.label}</div>`;
+  });
+  html += '</div>';
+
+  // Safe mode section
+  html += '<div class="fd-section"><div class="fd-section-title">Content</div>';
+  const safeActive = filters.safeMode ? ' active' : '';
+  html += `<div class="fd-item${safeActive}" data-action="safe" data-value="toggle"><span class="fd-check">${safeActive ? '\u2713' : ''}</span>Safe Mode (hide NSFW)</div>`;
+  html += '</div>';
+
+  dom.filterDropdown.innerHTML = html;
+}
+
+function handleDropdownClick(e) {
+  const item = e.target.closest('.fd-item');
+  if (!item) return;
+  const action = item.dataset.action;
+  const value = item.dataset.value;
+
+  if (action === 'topic') {
+    if (filters.topics.includes(value)) filters.topics = filters.topics.filter(x => x !== value);
+    else filters.topics.push(value);
+  } else if (action === 'rating') {
+    if (filters.ratings.includes(value)) filters.ratings = filters.ratings.filter(x => x !== value);
+    else filters.ratings.push(value);
+  } else if (action === 'safe') {
+    filters.safeMode = !filters.safeMode;
+  }
+
+  renderFilterDropdown();
+  onFiltersChanged();
+}
+
+// ===== Day Nav =====
+function updateDayNav() {
+  if (allDates.length === 0 || currentDateIdx < 0) {
+    dom.dayLabel.innerHTML = 'No dates';
+    dom.prevDay.disabled = true;
+    dom.nextDay.disabled = true;
+    dom.statusText.textContent = '';
+    return;
+  }
+  const info = allDates[currentDateIdx];
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = info.date === today;
+  const dateObj = new Date(info.date + 'T00:00:00');
+  const formatted = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  dom.dayLabel.innerHTML = `${formatted}${isToday ? '<span class="today-tag">Today</span>' : ''}<span class="day-count">(${info.count})</span>`;
+  dom.prevDay.disabled = currentDateIdx >= allDates.length - 1; // older
+  dom.nextDay.disabled = currentDateIdx <= 0; // newer
+}
+
+function navigateDay(offset) {
+  // offset -1 = newer (lower index), +1 = older (higher index)
+  const newIdx = currentDateIdx + offset;
+  if (newIdx < 0 || newIdx >= allDates.length) return;
+  currentDateIdx = newIdx;
+  updateDayNav();
+  loadCurrentDay();
+}
+
+// ===== Grid Rendering =====
+function renderGrid(images) {
+  dom.grid.innerHTML = '';
+  if (images.length === 0) {
+    showEmpty('No images match filters');
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  images.forEach((img, idx) => {
+    const card = document.createElement('div');
+    card.className = 'thumb-card' + (selectedPaths.has(img.path) ? ' selected' : '');
+    card.dataset.idx = idx;
+    card.dataset.path = img.path;
+
+    const imgEl = document.createElement('img');
+    imgEl.dataset.src = thumbUrl(img.path);
+    imgEl.alt = img.filename;
+    imgEl.title = img.filename;
+    card.appendChild(imgEl);
+
+    // Star
+    const star = document.createElement('button');
+    star.className = 'thumb-star' + (img.starred ? ' starred' : '');
+    star.innerHTML = img.starred ? '&#9733;' : '&#9734;';
+    star.addEventListener('click', (e) => { e.stopPropagation(); toggleStar(img); });
+    card.appendChild(star);
+
+    // Rating dots (color-coded: red→green)
+    const ratingDiv = document.createElement('div');
+    ratingDiv.className = 'thumb-rating';
+    for (let r = 1; r <= 5; r++) {
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (r <= (img.rating || 0) ? ` r${r}` : '');
+      ratingDiv.appendChild(dot);
+    }
+    card.appendChild(ratingDiv);
+
+    // Info button (visible on hover)
+    const infoBtn = document.createElement('button');
+    infoBtn.className = 'thumb-info-btn';
+    infoBtn.innerHTML = '&#9432;';
+    infoBtn.addEventListener('click', (e) => { e.stopPropagation(); showThumbInfo(img); });
+    card.appendChild(infoBtn);
+
+    // Topic label
+    if (img.topic && filters.topics.length === 0) {
+      const topicEl = document.createElement('span');
+      topicEl.className = 'thumb-topic';
+      topicEl.textContent = img.topic;
+      card.appendChild(topicEl);
+    }
+
+    // Checkbox (select mode)
+    const cb = document.createElement('div');
+    cb.className = 'thumb-checkbox';
+    cb.innerHTML = selectedPaths.has(img.path) ? '&#10003;' : '';
+    card.appendChild(cb);
+
+    // Click handler
+    card.addEventListener('click', (e) => handleCardClick(e, img, idx));
+
+    // Hover tracking for keyboard rating + preview
+    card.addEventListener('mouseenter', () => {
+      hoveredCard = img;
+      dom.hoverPreviewImg.src = `${API}/api/thumbnail?path=${encodeURIComponent(img.path)}&size=560`;
+      dom.hoverPreview.classList.add('visible');
+    });
+    card.addEventListener('mouseleave', () => {
+      if (hoveredCard === img) hoveredCard = null;
+      dom.hoverPreview.classList.remove('visible');
+    });
+
+    fragment.appendChild(card);
+  });
+  dom.grid.appendChild(fragment);
+  observeImages();
+  updateStatus(images.length);
+}
+
+function showEmpty(msg) {
+  dom.grid.innerHTML = `<div class="empty-state"><div class="icon">&#128444;</div><p>${msg}</p></div>`;
+  updateStatus(0);
+}
+
+function updateStatus(count) {
+  const total = currentImages ? currentImages.length : 0;
+  const filtered = count;
+  dom.statusText.textContent = filters.search
+    ? `Search: ${filtered} results`
+    : `${filtered} images${filtered !== total ? ` (${total} total)` : ''}`;
+  dom.statusRight.textContent = loggedInUser || '';
+}
+
+// ===== Lazy Loading =====
+let observer = null;
+function observeImages() {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          img.onload = () => img.classList.add('loaded');
+          img.onerror = () => { img.classList.add('loaded'); img.style.opacity = '0.3'; };
+          delete img.dataset.src;
+          observer.unobserve(img);
+        }
+      }
+    });
+  }, { rootMargin: '200px' });
+  dom.grid.querySelectorAll('img[data-src]').forEach(img => observer.observe(img));
+}
+
+// ===== Card Click =====
+function handleCardClick(e, img, idx) {
+  const images = getActiveImages();
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+click: toggle this image in selection
+    if (!selectMode) toggleSelectMode(true);
+    if (selectedPaths.has(img.path)) {
+      selectedPaths.delete(img.path);
+    } else {
+      selectedPaths.add(img.path);
+    }
+    lastSelectedIdx = idx;
+    updateSelection();
+    // Exit select mode if nothing selected
+    if (selectedPaths.size === 0) toggleSelectMode(false);
+    return;
+  }
+  if (e.shiftKey && lastSelectedIdx >= 0) {
+    // Shift+click: range select from last to current
+    if (!selectMode) toggleSelectMode(true);
+    const start = Math.min(lastSelectedIdx, idx);
+    const end = Math.max(lastSelectedIdx, idx);
+    for (let i = start; i <= end; i++) {
+      if (images[i]) selectedPaths.add(images[i].path);
+    }
+    updateSelection();
+    return;
+  }
+  // Plain click: if in select mode, clear selection and select only this one
+  if (selectMode) {
+    selectedPaths.clear();
+    selectedPaths.add(img.path);
+    lastSelectedIdx = idx;
+    updateSelection();
+    return;
+  }
+  // Plain click outside select mode: open fullscreen
+  openFullscreen(idx);
+}
+
+// ===== Select Mode =====
+function toggleSelectMode(force) {
+  selectMode = force !== undefined ? force : !selectMode;
+  dom.selectToggle.classList.toggle('active', selectMode);
+  document.body.classList.toggle('select-mode', selectMode);
+  if (!selectMode) {
+    selectedPaths.clear();
+    lastSelectedIdx = -1;
+    updateSelection();
+  }
+}
+
+function updateSelection() {
+  dom.grid.querySelectorAll('.thumb-card').forEach(card => {
+    const path = card.dataset.path;
+    const sel = selectedPaths.has(path);
+    card.classList.toggle('selected', sel);
+    const cb = card.querySelector('.thumb-checkbox');
+    if (cb) cb.innerHTML = sel ? '&#10003;' : '';
+  });
+  dom.batchCount.textContent = `${selectedPaths.size} selected`;
+}
+
+// ===== Star =====
+async function toggleStar(img) {
+  const newVal = !img.starred;
+  try {
+    await apiPost('/api/star', { path: img.path, starred: newVal });
+    img.starred = newVal;
+    refreshCardStar(img);
+    if (fsIndex >= 0) updateFsStar();
+  } catch (e) {
+    console.error('Star failed:', e);
+  }
+}
+
+function refreshCardStar(img) {
+  const card = dom.grid.querySelector(`[data-path="${CSS.escape(img.path)}"]`);
+  if (!card) return;
+  const star = card.querySelector('.thumb-star');
+  if (star) {
+    star.classList.toggle('starred', img.starred);
+    star.innerHTML = img.starred ? '&#9733;' : '&#9734;';
+  }
+}
+
+// ===== Rating =====
+async function setRating(img, rating) {
+  const newRating = img.rating === rating ? 0 : rating;
+  try {
+    await apiPost('/api/rate', { path: img.path, rating: newRating });
+    img.rating = newRating;
+    refreshCardRating(img);
+    if (fsIndex >= 0) updateFsRating();
+  } catch (e) {
+    console.error('Rate failed:', e);
+  }
+}
+
+function refreshCardRating(img) {
+  const card = dom.grid.querySelector(`[data-path="${CSS.escape(img.path)}"]`);
+  if (!card) return;
+  const dots = card.querySelectorAll('.thumb-rating .dot');
+  dots.forEach((dot, i) => {
+    const r = i + 1;
+    // Remove all rating classes
+    dot.className = 'dot';
+    if (r <= (img.rating || 0)) dot.classList.add(`r${r}`);
+  });
+}
+
+// ===== Delete =====
+function confirmDelete(paths, msg) {
+  dom.confirmMsg.textContent = msg || `Delete ${paths.length} image${paths.length > 1 ? 's' : ''}? This cannot be undone.`;
+  dom.confirmOverlay.classList.add('open');
+  confirmCallback = async () => {
+    try {
+      await apiPost('/api/delete', { paths });
+      // Remove from current data
+      paths.forEach(p => {
+        const idx = currentImages.findIndex(i => i.path === p);
+        if (idx >= 0) currentImages.splice(idx, 1);
+        selectedPaths.delete(p);
+      });
+      if (fsIndex >= 0) {
+        const activeImages = getActiveImages();
+        if (activeImages.length === 0) closeFullscreen();
+        else {
+          if (fsIndex >= activeImages.length) fsIndex = activeImages.length - 1;
+          showFsImage();
+        }
+      }
+      renderGrid(applyLocalFilters(currentImages));
+      updateSelection();
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+    dom.confirmOverlay.classList.remove('open');
+    confirmCallback = null;
+  };
+}
+
+// ===== Fullscreen =====
+function getActiveImages() {
+  return applyLocalFilters(currentImages);
+}
+
+function openFullscreen(idx) {
+  const images = getActiveImages();
+  if (idx < 0 || idx >= images.length) return;
+  dom.grid.querySelectorAll('.thumb-card.last-viewed').forEach(c => c.classList.remove('last-viewed'));
+  fsIndex = idx;
+  dom.fullscreen.classList.add('open');
+  showFsImage();
+  history.pushState({ view: 'fullscreen', idx }, '', updateHashStr());
+}
+
+function closeFullscreen() {
+  stopSlideshow();
+  dom.fullscreen.classList.remove('open');
+  dom.fullscreen.classList.remove('info-open');
+  closeInfoPanel();
+  const returnIdx = fsIndex;
+  fsIndex = -1;
+  history.pushState({ view: 'grid' }, '', updateHashStr());
+  // Highlight and scroll to the last-viewed image
+  if (!selectMode && returnIdx >= 0) {
+    dom.grid.querySelectorAll('.thumb-card.last-viewed').forEach(c => c.classList.remove('last-viewed'));
+    const cards = dom.grid.querySelectorAll('.thumb-card');
+    if (cards[returnIdx]) {
+      cards[returnIdx].classList.add('last-viewed');
+      cards[returnIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+}
+
+function showFsImage() {
+  const images = getActiveImages();
+  if (fsIndex < 0 || fsIndex >= images.length) return;
+  const img = images[fsIndex];
+  dom.fsImage.src = imageUrl(img.path);
+  dom.fsFilename.textContent = img.filename;
+  updateFsStar();
+  updateFsRating();
+  dom.fsPrev.style.display = fsIndex > 0 ? '' : 'none';
+  dom.fsNext.style.display = fsIndex < images.length - 1 ? '' : 'none';
+  // If info panel is open in fullscreen, auto-update it
+  if (infoPanelContext === 'fullscreen' && dom.infoPanel.classList.contains('open')) {
+    showInfoPanel();
+  }
+}
+
+function updateFsStar() {
+  const images = getActiveImages();
+  if (fsIndex < 0 || fsIndex >= images.length) return;
+  const img = images[fsIndex];
+  dom.fsStar.innerHTML = img.starred ? '&#9733;' : '&#9734;';
+  dom.fsStar.classList.toggle('starred', img.starred);
+}
+
+function updateFsRating() {
+  const images = getActiveImages();
+  if (fsIndex < 0 || fsIndex >= images.length) return;
+  const img = images[fsIndex];
+  $$('.fs-rating-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.r) === img.rating);
+  });
+}
+
+function fsNavigate(offset) {
+  const images = getActiveImages();
+  const newIdx = fsIndex + offset;
+  if (newIdx < 0 || newIdx >= images.length) return;
+  fsIndex = newIdx;
+  showFsImage();
+}
+
+// ===== Info Panel =====
+async function showInfoPanel() {
+  const images = getActiveImages();
+  if (fsIndex < 0 || fsIndex >= images.length) return;
+  const img = images[fsIndex];
+  infoPanelContext = 'fullscreen';
+  infoPanelImagePath = img.path;
+  dom.infoContent.innerHTML = '<div class="loading">Loading metadata...</div>';
+  dom.infoPanel.classList.add('open');
+  dom.fullscreen.classList.add('info-open');
+  dom.infoBackdrop.classList.remove('open');
+  try {
+    const data = await api(`/api/metadata?path=${encodeURIComponent(img.path)}`);
+    // Only render if still showing same image
+    if (infoPanelImagePath === img.path) renderInfoPanel(data);
+  } catch (e) {
+    dom.infoContent.innerHTML = '<p>Failed to load metadata</p>';
+  }
+}
+
+async function showThumbInfo(img) {
+  infoPanelContext = 'thumbnail';
+  infoPanelImagePath = img.path;
+  dom.infoContent.innerHTML = '<div class="loading">Loading metadata...</div>';
+  dom.infoPanel.classList.add('open');
+  dom.infoBackdrop.classList.add('open');
+  try {
+    const data = await api(`/api/metadata?path=${encodeURIComponent(img.path)}`);
+    if (infoPanelImagePath === img.path) renderInfoPanel(data);
+  } catch (e) {
+    dom.infoContent.innerHTML = '<p>Failed to load metadata</p>';
+  }
+}
+
+function closeInfoPanel() {
+  dom.infoPanel.classList.remove('open');
+  dom.infoBackdrop.classList.remove('open');
+  dom.fullscreen.classList.remove('info-open');
+  infoPanelContext = null;
+  infoPanelImagePath = null;
+}
+
+function renderInfoPanel(data) {
+  let html = '';
+  const addRow = (key, val) => {
+    if (val === null || val === undefined || val === '') return;
+    const v = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+    html += `<div class="meta-row"><div class="meta-key">${escHtml(key)}</div><div class="meta-val">${escHtml(v)}</div></div>`;
+  };
+
+  addRow('Filename', data.filename);
+  addRow('Dimensions', `${data.width} x ${data.height}`);
+  addRow('Format', data.format);
+  addRow('Size', formatBytes(data.size_bytes));
+  addRow('Rating', data.rating || 'None');
+  addRow('Starred', data.starred ? 'Yes' : 'No');
+
+  if (data.metadata) {
+    const meta = data.metadata;
+    // Priority fields
+    const priority = ['Prompt', 'prompt', 'raw_prompt', 'Negative prompt', 'negative_prompt', 'raw_negative_prompt',
+      'Styles', 'styles', 'Base Model', 'base_model', 'Seed', 'seed', 'Performance', 'performance',
+      'Steps', 'steps', 'Sampler', 'sampler', 'Scheduler', 'scheduler', 'CFG scale', 'guidance_scale',
+      'Size', 'resolution', 'Sharpness', 'sharpness', 'VAE', 'vae', 'Version', 'version'];
+    const shown = new Set();
+    priority.forEach(k => {
+      if (meta[k] !== undefined) { addRow(k, meta[k]); shown.add(k); }
+    });
+    // Remaining
+    Object.keys(meta).forEach(k => {
+      if (!shown.has(k)) addRow(k, meta[k]);
+    });
+  }
+
+  dom.infoContent.innerHTML = html;
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ===== Slideshow =====
+function toggleSlideshow() {
+  if (slideshowActive) { stopSlideshow(); return; }
+  startSlideshow();
+}
+
+function startSlideshow() {
+  slideshowActive = true;
+  dom.slideshowToggle.classList.add('active');
+  dom.slideshowToggle.innerHTML = '&#9646;&#9646; Pause';
+  const interval = (parseInt(dom.slideshowSpeed.value) || 3) * 1000;
+  // If we have a selection, build slideshow from selected images
+  slideshowAdvance();
+  slideshowTimer = setInterval(slideshowAdvance, interval);
+}
+
+function stopSlideshow() {
+  slideshowActive = false;
+  if (slideshowTimer) { clearInterval(slideshowTimer); slideshowTimer = null; }
+  dom.slideshowToggle.classList.remove('active');
+  dom.slideshowToggle.innerHTML = '&#9654; Play';
+}
+
+function slideshowAdvance() {
+  const images = getSlideshowImages();
+  if (images.length === 0) { stopSlideshow(); return; }
+
+  // Determine next index
+  let nextIdx;
+  if (selectedPaths.size > 0) {
+    // Playing through selected images only
+    const selectedList = images.filter(i => selectedPaths.has(i.path));
+    if (selectedList.length === 0) { stopSlideshow(); return; }
+    const currentPath = fsIndex >= 0 && images[fsIndex] ? images[fsIndex].path : null;
+    const curSelIdx = selectedList.findIndex(i => i.path === currentPath);
+    const nextSelIdx = (curSelIdx + 1) % selectedList.length;
+    nextIdx = images.findIndex(i => i.path === selectedList[nextSelIdx].path);
+  } else {
+    nextIdx = (fsIndex + 1) % images.length;
+  }
+
+  if (nextIdx === fsIndex) return;
+
+  // Fade transition
+  dom.fsImage.classList.add('fading');
+  setTimeout(() => {
+    fsIndex = nextIdx;
+    showFsImage();
+    dom.fsImage.classList.remove('fading');
+  }, 400);
+}
+
+function getSlideshowImages() {
+  return getActiveImages();
+}
+
+// ===== Calendar =====
+function openCalendar() {
+  // Start viewing the month of the currently selected date
+  if (allDates.length > 0 && currentDateIdx >= 0) {
+    const d = allDates[currentDateIdx].date;
+    calViewDate = new Date(d + 'T00:00:00');
+  } else {
+    calViewDate = new Date();
+  }
+  renderCalendar();
+  dom.calendarOverlay.classList.add('open');
+}
+
+function closeCalendar() {
+  dom.calendarOverlay.classList.remove('open');
+}
+
+function renderCalendar() {
+  const year = calViewDate.getFullYear();
+  const month = calViewDate.getMonth();
+  const monthNames = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  dom.calTitle.textContent = `${monthNames[month]} ${year}`;
+
+  // Build a map of date→count from allDates
+  const dateCounts = {};
+  let maxCount = 0;
+  allDates.forEach(d => { dateCounts[d.date] = d.count; if (d.count > maxCount) maxCount = d.count; });
+
+  // Current selected date
+  const currentDate = (allDates.length > 0 && currentDateIdx >= 0) ? allDates[currentDateIdx].date : '';
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // First day of month, last day, etc.
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDow = firstDay.getDay(); // 0=Sun
+
+  let html = '';
+  // Day-of-week headers
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  dows.forEach(d => { html += `<div class="cal-dow">${d}</div>`; });
+
+  // Leading empty cells from previous month
+  const prevMonthLast = new Date(year, month, 0).getDate();
+  for (let i = startDow - 1; i >= 0; i--) {
+    const day = prevMonthLast - i;
+    const prevMonth = month === 0 ? 11 : month - 1;
+    const prevYear = month === 0 ? year - 1 : year;
+    const dateStr = `${prevYear}-${String(prevMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const count = dateCounts[dateStr] || 0;
+    const cls = ['cal-day', 'other-month'];
+    if (count > 0) cls.push('has-images', quantile(count, maxCount));
+    html += `<div class="${cls.join(' ')}" data-date="${dateStr}">`;
+    html += `<span>${day}</span>`;
+    if (count > 0) html += `<span class="cal-count">${count}</span>`;
+    html += `<div class="cal-bar"></div></div>`;
+  }
+
+  // Days of current month
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const count = dateCounts[dateStr] || 0;
+    const cls = ['cal-day'];
+    if (count > 0) cls.push('has-images', quantile(count, maxCount));
+    if (dateStr === currentDate) cls.push('current');
+    if (dateStr === todayStr) cls.push('today');
+    html += `<div class="${cls.join(' ')}" data-date="${dateStr}">`;
+    html += `<span>${day}</span>`;
+    if (count > 0) html += `<span class="cal-count">${count}</span>`;
+    html += `<div class="cal-bar"></div></div>`;
+  }
+
+  // Trailing cells from next month
+  const totalCells = startDow + lastDay.getDate();
+  const trailing = (7 - (totalCells % 7)) % 7;
+  for (let day = 1; day <= trailing; day++) {
+    const nextMonth = month === 11 ? 0 : month + 1;
+    const nextYear = month === 11 ? year + 1 : year;
+    const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const count = dateCounts[dateStr] || 0;
+    const cls = ['cal-day', 'other-month'];
+    if (count > 0) cls.push('has-images', quantile(count, maxCount));
+    html += `<div class="${cls.join(' ')}" data-date="${dateStr}">`;
+    html += `<span>${day}</span>`;
+    if (count > 0) html += `<span class="cal-count">${count}</span>`;
+    html += `<div class="cal-bar"></div></div>`;
+  }
+
+  dom.calGrid.innerHTML = html;
+}
+
+function quantile(count, max) {
+  if (max === 0) return 'q1';
+  const ratio = count / max;
+  if (ratio <= 0.25) return 'q1';
+  if (ratio <= 0.5) return 'q2';
+  if (ratio <= 0.75) return 'q3';
+  return 'q4';
+}
+
+function handleCalendarClick(e) {
+  const cell = e.target.closest('.cal-day');
+  if (!cell) return;
+  const dateStr = cell.dataset.date;
+  if (!dateStr) return;
+
+  // If the date is in allDates, navigate to it
+  const idx = allDates.findIndex(d => d.date === dateStr);
+  if (idx >= 0) {
+    currentDateIdx = idx;
+    updateDayNav();
+    loadCurrentDay();
+    closeCalendar();
+  } else if (cell.classList.contains('other-month')) {
+    // Navigate calendar to that month even if no images
+    calViewDate = new Date(dateStr + 'T00:00:00');
+    renderCalendar();
+  }
+}
+
+function calChangeMonth(offset) {
+  calViewDate.setMonth(calViewDate.getMonth() + offset);
+  renderCalendar();
+}
+
+// ===== Search =====
+let searchTimer = null;
+async function doSearch(query) {
+  filters.search = (query && query.length >= 2) ? query : '';
+  renderCapsules();
+  await loadDates();
+}
+
+// ===== Hash State (browser back/forward) =====
+function updateHash() {
+  // Don't push state here, just update URL silently
+}
+
+function updateHashStr() {
+  const params = new URLSearchParams();
+  if (filters.topics.length > 0) params.set('topic', filters.topics.join(','));
+  if (allDates.length > 0 && currentDateIdx >= 0) {
+    params.set('date', allDates[currentDateIdx].date);
+  }
+  if (filters.search) params.set('search', filters.search);
+  if (fsIndex >= 0) {
+    const images = getActiveImages();
+    if (images[fsIndex]) params.set('image', images[fsIndex].filename);
+  }
+  return '#' + params.toString();
+}
+
+function readHashState() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) {
+    loadDates();
+    return;
+  }
+  const params = new URLSearchParams(hash);
+  // Restore filters from hash
+  if (params.get('topic')) filters.topics = params.get('topic').split(',').filter(Boolean);
+  renderCapsules();
+
+  loadDates().then(() => {
+    if (params.get('date')) {
+      const idx = allDates.findIndex(d => d.date === params.get('date'));
+      if (idx >= 0) {
+        currentDateIdx = idx;
+        updateDayNav();
+        loadCurrentDay().then(() => {
+          if (params.get('search')) {
+            dom.searchInput.value = params.get('search');
+            doSearch(params.get('search')).then(() => {
+              if (params.get('image')) openImageByFilename(params.get('image'));
+            });
+          } else if (params.get('image')) {
+            openImageByFilename(params.get('image'));
+          }
+        });
+      }
+    } else if (params.get('search')) {
+      dom.searchInput.value = params.get('search');
+      doSearch(params.get('search'));
+    }
+  });
+}
+
+function openImageByFilename(filename) {
+  const images = getActiveImages();
+  const idx = images.findIndex(i => i.filename === filename);
+  if (idx >= 0) openFullscreen(idx);
+}
+
+// ===== Regenerate =====
+function regenerateImage() {
+  const images = getActiveImages();
+  if (fsIndex < 0 || fsIndex >= images.length) return;
+  const img = images[fsIndex];
+  // Open main UI in new tab with regenerate param
+  const mainPort = 7865; // Default Gradio port
+  const mainUrl = `${window.location.protocol}//${window.location.hostname}:${mainPort}/?regenerate=${encodeURIComponent(img.path)}`;
+  window.open(mainUrl, '_blank');
+}
+
+// ===== Mobile Touch =====
+function setupTouchHandlers() {
+  // Grid swipe for day navigation
+  dom.gridContainer.addEventListener('touchstart', (e) => {
+    if (selectMode) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+
+    // Long press for select mode
+    const target = e.target.closest('.thumb-card');
+    if (target) {
+      longPressTimer = setTimeout(() => {
+        if (!selectMode) toggleSelectMode(true);
+        const path = target.dataset.path;
+        const img = currentImages.find(i => i.path === path) || searchResults.find(i => i.path === path);
+        if (img) { selectedPaths.add(img.path); updateSelection(); }
+      }, 500);
+    }
+  }, { passive: true });
+
+  dom.gridContainer.addEventListener('touchmove', (e) => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }, { passive: true });
+
+  dom.gridContainer.addEventListener('touchend', (e) => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (selectMode || filters.search) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+    if (dt < 400 && Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2) {
+      if (dx > 0) navigateDay(1);  // swipe right = older
+      else navigateDay(-1);        // swipe left = newer
+    }
+  }, { passive: true });
+
+  // Fullscreen swipe and tap
+  dom.fsImageContainer.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  dom.fsImageContainer.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+    if (dt < 300 && Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+      // Tap — show rating overlay
+      showRatingOverlay();
+      return;
+    }
+    if (dt < 400 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx > 0) fsNavigate(-1);
+      else fsNavigate(1);
+    }
+  }, { passive: true });
+}
+
+function showRatingOverlay() {
+  dom.fsRatingOverlay.classList.add('visible');
+  if (ratingOverlayTimer) clearTimeout(ratingOverlayTimer);
+  ratingOverlayTimer = setTimeout(() => {
+    dom.fsRatingOverlay.classList.remove('visible');
+  }, 3000);
+}
+
+// ===== Keyboard =====
+function setupKeyboard() {
+  document.addEventListener('keydown', (e) => {
+    const fsOpen = dom.fullscreen.classList.contains('open');
+    const inputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+
+    if (e.key === 'Escape') {
+      if (dom.calendarOverlay.classList.contains('open')) { closeCalendar(); e.preventDefault(); return; }
+      if (dom.confirmOverlay.classList.contains('open')) { dom.confirmOverlay.classList.remove('open'); confirmCallback = null; e.preventDefault(); return; }
+      if (dom.infoPanel.classList.contains('open') && infoPanelContext === 'thumbnail') { closeInfoPanel(); e.preventDefault(); return; }
+      if (dom.infoPanel.classList.contains('open') && infoPanelContext === 'fullscreen') { closeInfoPanel(); e.preventDefault(); return; }
+      if (slideshowActive) { stopSlideshow(); e.preventDefault(); return; }
+      if (fsOpen) { closeFullscreen(); e.preventDefault(); return; }
+      if (selectMode) { toggleSelectMode(false); e.preventDefault(); return; }
+    }
+
+    // Enter key: confirm dialog (works in any context)
+    if (e.key === 'Enter' && !inputFocused) {
+      if (dom.confirmOverlay.classList.contains('open') && confirmCallback) {
+        confirmCallback(); e.preventDefault(); return;
+      }
+    }
+
+    if (inputFocused) {
+      if (e.key === 'Escape') dom.searchInput.blur();
+      return;
+    }
+
+    // Fullscreen keys
+    if (fsOpen) {
+      if (e.key === 'ArrowLeft') { fsNavigate(-1); e.preventDefault(); }
+      else if (e.key === 'ArrowRight') { fsNavigate(1); e.preventDefault(); }
+      else if (e.key === 'f' || e.key === 'F') {
+        const images = getActiveImages();
+        if (images[fsIndex]) toggleStar(images[fsIndex]);
+      }
+      else if (e.key === 'Delete') {
+        const images = getActiveImages();
+        if (images[fsIndex]) confirmDelete([images[fsIndex].path], `Delete "${images[fsIndex].filename}"?`);
+      }
+      else if (e.key === 'i' || e.key === 'I') {
+        if (dom.infoPanel.classList.contains('open')) closeInfoPanel();
+        else showInfoPanel();
+      }
+      else if (e.key === 'p' || e.key === 'P') {
+        toggleSlideshow();
+      }
+      else if (e.key >= '1' && e.key <= '5') {
+        const images = getActiveImages();
+        if (images[fsIndex]) setRating(images[fsIndex], parseInt(e.key));
+      }
+      return;
+    }
+
+    // Grid keys
+    if (e.key === 'ArrowLeft') { navigateDay(1); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { navigateDay(-1); e.preventDefault(); }
+    else if (e.key === '/') { dom.searchInput.focus(); e.preventDefault(); }
+    else if (e.key === 'Delete') {
+      // Delete selected images or hovered image
+      if (selectMode && selectedPaths.size > 0) {
+        confirmDelete([...selectedPaths], `Delete ${selectedPaths.size} selected image(s)?`);
+        e.preventDefault();
+      } else if (hoveredCard) {
+        confirmDelete([hoveredCard.path], `Delete "${hoveredCard.filename}"?`);
+        e.preventDefault();
+      }
+    }
+    else if (e.key >= '1' && e.key <= '5' && hoveredCard) {
+      setRating(hoveredCard, parseInt(e.key));
+    }
+    else if (e.key === 'a' || e.key === 'A') {
+      if (selectMode) {
+        const images = getActiveImages();
+        if (selectedPaths.size === images.length) selectedPaths.clear();
+        else images.forEach(i => selectedPaths.add(i.path));
+        updateSelection();
+      }
+    }
+  });
+}
+
+// ===== Event Listeners =====
+function setupEventListeners() {
+  // Search
+  dom.searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => doSearch(dom.searchInput.value.trim()), 300);
+  });
+  dom.searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { dom.searchInput.value = ''; doSearch(''); dom.searchInput.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); doSearch(dom.searchInput.value.trim()); }
+  });
+
+  // Filter dropdown
+  dom.addFilterBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderFilterDropdown();
+    dom.filterDropdown.classList.toggle('open');
+  });
+  dom.filterDropdown.addEventListener('click', handleDropdownClick);
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.add-filter-wrap')) {
+      dom.filterDropdown.classList.remove('open');
+    }
+  });
+
+  // Day nav
+  dom.prevDay.addEventListener('click', () => navigateDay(1));
+  dom.nextDay.addEventListener('click', () => navigateDay(-1));
+
+  // Calendar
+  dom.dayLabel.addEventListener('click', openCalendar);
+  dom.calPrevMonth.addEventListener('click', () => calChangeMonth(-1));
+  dom.calNextMonth.addEventListener('click', () => calChangeMonth(1));
+  dom.calGrid.addEventListener('click', handleCalendarClick);
+  dom.calendarOverlay.addEventListener('click', (e) => {
+    if (e.target === dom.calendarOverlay) closeCalendar();
+  });
+
+  // Select mode
+  dom.selectToggle.addEventListener('click', () => toggleSelectMode());
+
+  // Batch actions
+  dom.batchSelectAll.addEventListener('click', () => {
+    const images = getActiveImages();
+    if (selectedPaths.size === images.length) selectedPaths.clear();
+    else images.forEach(i => selectedPaths.add(i.path));
+    updateSelection();
+  });
+  $('#batchStar').addEventListener('click', async () => {
+    if (selectedPaths.size === 0) return;
+    await apiPost('/api/batch', { paths: [...selectedPaths], action: 'star', value: true });
+    selectedPaths.forEach(p => {
+      const img = currentImages.find(i => i.path === p);
+      if (img) img.starred = true;
+    });
+    renderGrid(applyLocalFilters(currentImages));
+    updateSelection();
+  });
+  for (let r = 1; r <= 5; r++) {
+    $(`#batchRate${r}`).addEventListener('click', async () => {
+      if (selectedPaths.size === 0) return;
+      await apiPost('/api/batch', { paths: [...selectedPaths], action: 'rate', value: r });
+      selectedPaths.forEach(p => {
+        const img = currentImages.find(i => i.path === p);
+        if (img) img.rating = r;
+      });
+      renderGrid(applyLocalFilters(currentImages));
+      updateSelection();
+    });
+  }
+  $('#batchDelete').addEventListener('click', () => {
+    if (selectedPaths.size === 0) return;
+    confirmDelete([...selectedPaths]);
+  });
+
+  // Fullscreen
+  dom.fsClose.addEventListener('click', closeFullscreen);
+  dom.fsPrev.addEventListener('click', () => fsNavigate(-1));
+  dom.fsNext.addEventListener('click', () => fsNavigate(1));
+  dom.fsStar.addEventListener('click', () => {
+    const images = getActiveImages();
+    if (images[fsIndex]) toggleStar(images[fsIndex]);
+  });
+  dom.fsDelete.addEventListener('click', () => {
+    const images = getActiveImages();
+    if (images[fsIndex]) confirmDelete([images[fsIndex].path], `Delete "${images[fsIndex].filename}"?`);
+  });
+  dom.fsInfo.addEventListener('click', () => {
+    if (dom.infoPanel.classList.contains('open')) closeInfoPanel();
+    else showInfoPanel();
+  });
+  dom.fsRegenerate.addEventListener('click', regenerateImage);
+  dom.slideshowToggle.addEventListener('click', toggleSlideshow);
+
+  // Rating buttons (both bar and overlay)
+  $$('.fs-rating-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const images = getActiveImages();
+      if (images[fsIndex]) setRating(images[fsIndex], parseInt(btn.dataset.r));
+    });
+  });
+
+  // Info panel close
+  $('#infoPanelClose').addEventListener('click', closeInfoPanel);
+  dom.infoBackdrop.addEventListener('click', closeInfoPanel);
+
+  // Confirm dialog
+  $('#confirmYes').addEventListener('click', () => { if (confirmCallback) confirmCallback(); });
+  $('#confirmNo').addEventListener('click', () => { dom.confirmOverlay.classList.remove('open'); confirmCallback = null; });
+
+  // Browser back/forward
+  window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.view === 'grid') {
+      dom.fullscreen.classList.remove('open');
+      dom.infoPanel.classList.remove('open');
+      fsIndex = -1;
+    } else if (e.state && e.state.view === 'fullscreen') {
+      openFullscreen(e.state.idx);
+    }
+  });
+
+  setupKeyboard();
+  setupTouchHandlers();
+}
+
+// ===== Start =====
+init();
+
+})();
+</script>
+</body>
+</html>

@@ -699,6 +699,12 @@ metadata_created_by = get_config_item_or_set_default(
     validator=lambda x: isinstance(x, str),
     expected_type=str
 )
+admin_users = get_config_item_or_set_default(
+    key='admin_users',
+    default_value=[],
+    validator=lambda x: isinstance(x, list) and all(isinstance(u, str) for u in x),
+    expected_type=list
+)
 
 example_inpaint_prompts = [[x] for x in example_inpaint_prompts]
 example_enhance_detection_prompts = [[x] for x in example_enhance_detection_prompts]

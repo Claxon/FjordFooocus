@@ -36,8 +36,9 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import (
-    PreTrainedModel,
+from transformers.modeling_utils import PreTrainedModel
+from transformers import GenerationMixin
+from transformers.pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -545,7 +546,7 @@ class BertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class BertPreTrainedModel(PreTrainedModel):
+class BertPreTrainedModel(PreTrainedModel, GenerationMixin):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.

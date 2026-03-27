@@ -53,6 +53,10 @@ def javascript_html():
     head += f'<script type="text/javascript" src="{camera_fullscreen_js_path}"></script>\n'
     layer_editor_js_path = webpath('javascript/layer_editor.js')
     head += f'<script type="text/javascript" src="{layer_editor_js_path}"></script>\n'
+    login_js_path = webpath('javascript/login.js')
+    head += f'<script type="text/javascript" src="{login_js_path}"></script>\n'
+    regenerate_js_path = webpath('javascript/regenerate.js')
+    head += f'<script type="text/javascript" src="{regenerate_js_path}"></script>\n'
     head += f'<meta name="samples-path" content="{samples_path}">\n'
 
     if args_manager.args.theme:

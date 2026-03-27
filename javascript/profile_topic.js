@@ -78,11 +78,9 @@
     };
 
     function initSync() {
-        // Restore profile from localStorage (returning users get their name pre-filled)
-        var storedProfile = getProfile();
-        if (storedProfile) {
-            setGradioTextboxValue('profile_input', storedProfile);
-        }
+        // Profile is now set by the login system — skip localStorage restore
+        // (login.js handles session restore via sessionStorage)
+
         // Topic intentionally NOT restored — starts empty on every page load
 
         // Build topic suggestions datalist
@@ -114,26 +112,25 @@
             }
         }
 
-        // Guard: require a profile name before generating
+        // Guard: require login before generating
         var genBtn = document.getElementById('generate_button');
         if (genBtn) {
             genBtn.addEventListener('click', function(event) {
+                // If logged in via the auth system, profile is already set
+                if (window.fjordLoggedIn) return;
+
                 var profileContainer = document.getElementById('profile_input');
                 if (!profileContainer) return;
                 var el = profileContainer.querySelector('textarea') || profileContainer.querySelector('input');
                 if (el && !el.value.trim()) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    var name = window.prompt('Enter your name to save your images.\n\nThis keeps your images separate from other users:', '');
-                    if (name && name.trim()) {
-                        var trimmed = name.trim();
-                        localStorage.setItem(PROFILE_KEY, trimmed);
-                        setGradioTextboxValue('profile_input', trimmed);
-                        // Re-trigger the click after Gradio has a tick to process the input event
-                        setTimeout(function() { genBtn.click(); }, 200);
-                    } else {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        el.focus();
+                    // Scroll to login panel instead of prompting
+                    var loginPanel = document.getElementById('login_panel');
+                    if (loginPanel) {
+                        loginPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        var usernameInput = document.querySelector('#login_username textarea, #login_username input');
+                        if (usernameInput) usernameInput.focus();
                     }
                 }
             }, true); // capture phase — runs before Gradio's handlers

@@ -17,6 +17,12 @@
 
     // ---- Constants ----
     var PREF_DEVICE_ID = 'fjord_camera_device_id';
+    var PREF_ROTATION = 'fjord_camera_rotation';
+
+    // ---- Generation timing (for countdown prediction) ----
+    var generationTimes = [];       // recent generation durations in ms
+    var MAX_TIMING_SAMPLES = 5;     // rolling window size
+    var generationStartTime = 0;    // timestamp when current generation started
 
     // Map button elem_ids to their Gradio image target selectors
     var BUTTON_TARGET_MAP = {
@@ -167,6 +173,40 @@
         }
     }
 
+    // ---- Video preview rotation ----
+
+    function applyVideoRotation() {
+        if (!videoElement) return;
+        var rotation = getCameraRotation();
+        if (rotation === 0) {
+            videoElement.style.transform = '';
+            videoElement.style.aspectRatio = '';
+            return;
+        }
+        // For 90/270, the video needs to be scaled down so the rotated frame
+        // fits inside its container without overflow.
+        if (rotation === 90 || rotation === 270) {
+            // The video's natural aspect ratio (w/h). After rotating 90°, the
+            // visible dimensions swap, so we scale by the reciprocal of AR
+            // to keep it within the container width.
+            videoElement.style.transform = 'rotate(' + rotation + 'deg)';
+            // Use a listener to compute scale once video dimensions are known
+            var onMeta = function() {
+                var vw = videoElement.videoWidth || 1280;
+                var vh = videoElement.videoHeight || 720;
+                var scale = vh / vw; // container is width-based, rotated height becomes width
+                videoElement.style.transform = 'rotate(' + rotation + 'deg) scale(' + scale + ')';
+            };
+            if (videoElement.readyState >= 1) {
+                onMeta();
+            } else {
+                videoElement.addEventListener('loadedmetadata', onMeta, { once: true });
+            }
+        } else {
+            videoElement.style.transform = 'rotate(' + rotation + 'deg)';
+        }
+    }
+
     // ---- Stream management ----
 
     async function startStream(deviceId) {
@@ -179,6 +219,7 @@
             mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
             if (videoElement) {
                 videoElement.srcObject = mediaStream;
+                applyVideoRotation();
             }
 
             mediaStream.getVideoTracks().forEach(function(track) {
@@ -213,14 +254,34 @@
 
     // ---- Frame capture ----
 
+    function getCameraRotation() {
+        return parseInt(localStorage.getItem(PREF_ROTATION) || '0', 10);
+    }
+
     function captureFrame() {
         if (!videoElement || videoElement.readyState < 2) return null;
 
+        var vw = videoElement.videoWidth;
+        var vh = videoElement.videoHeight;
+        var rotation = getCameraRotation();
+
         var canvas = document.createElement('canvas');
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
+        // For 90/270 rotation, swap canvas dimensions
+        if (rotation === 90 || rotation === 270) {
+            canvas.width = vh;
+            canvas.height = vw;
+        } else {
+            canvas.width = vw;
+            canvas.height = vh;
+        }
+
         var ctx = canvas.getContext('2d');
-        ctx.drawImage(videoElement, 0, 0);
+        ctx.save();
+        // Translate to center, rotate, then draw offset by half original dimensions
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.drawImage(videoElement, -vw / 2, -vh / 2);
+        ctx.restore();
 
         return new Promise(function(resolve) {
             canvas.toBlob(function(blob) {
@@ -340,10 +401,35 @@
             genBtn.click();
         }
 
+        generationStartTime = Date.now();
         liveState = 'WAITING_FOR_IDLE';
         setStatus('Generating...');
         updateAllCameraButtonUI();
+
+        // Notify fullscreen overlay that generation started
+        window.dispatchEvent(new CustomEvent('livegenerate-start', {
+            detail: { predictedMs: getAverageGenerationTime() }
+        }));
+
         startIdlePolling();
+    }
+
+    function recordGenerationTime() {
+        if (generationStartTime > 0) {
+            var elapsed = Date.now() - generationStartTime;
+            generationTimes.push(elapsed);
+            if (generationTimes.length > MAX_TIMING_SAMPLES) {
+                generationTimes.shift();
+            }
+            generationStartTime = 0;
+        }
+    }
+
+    function getAverageGenerationTime() {
+        if (generationTimes.length === 0) return 0;
+        var sum = 0;
+        for (var i = 0; i < generationTimes.length; i++) sum += generationTimes[i];
+        return Math.round(sum / generationTimes.length);
     }
 
     // ---- Capture and generate (multi-target) ----
@@ -429,6 +515,12 @@
             if (liveState === 'WAITING_FOR_IDLE' && isGenerationIdle()) {
                 clearInterval(pollInterval);
                 pollInterval = null;
+
+                // Record how long this generation took
+                recordGenerationTime();
+
+                // Notify fullscreen overlay: generation finished, capture imminent
+                window.dispatchEvent(new CustomEvent('livegenerate-captured'));
 
                 // Wait a bit to avoid racing with queue auto-continue
                 setTimeout(function() {
@@ -594,14 +686,18 @@
 
         container.innerHTML = '';
 
+        var selectStyle = 'width: 100%; background: var(--background-fill-secondary, #1a1a2e); color: var(--body-text-color, #e0e0e0); border: 1px solid var(--border-color-primary, #444); border-radius: 6px; padding: 6px 8px; font-size: 13px;';
+        var labelStyle = 'font-size: 13px; color: var(--body-text-color-subdued, #aaa); display: block; margin-bottom: 4px;';
+
+        // Camera Device
         var label = document.createElement('label');
         label.textContent = 'Camera Device';
-        label.style.cssText = 'font-size: 13px; color: var(--body-text-color-subdued, #aaa); display: block; margin-bottom: 4px;';
+        label.style.cssText = labelStyle;
         container.appendChild(label);
 
         var select = document.createElement('select');
         select.id = 'camera_device_select_settings';
-        select.style.cssText = 'width: 100%; background: var(--background-fill-secondary, #1a1a2e); color: var(--body-text-color, #e0e0e0); border: 1px solid var(--border-color-primary, #444); border-radius: 6px; padding: 6px 8px; font-size: 13px;';
+        select.style.cssText = selectStyle;
         select.addEventListener('change', function() {
             localStorage.setItem(PREF_DEVICE_ID, this.value);
             var overlaySelect = document.getElementById('camera_device_select_overlay');
@@ -614,8 +710,35 @@
             }
         });
         container.appendChild(select);
-
         populateDeviceList(select);
+
+        // Camera Rotation
+        var rotLabel = document.createElement('label');
+        rotLabel.textContent = 'Camera Rotation';
+        rotLabel.style.cssText = labelStyle + ' margin-top: 10px;';
+        container.appendChild(rotLabel);
+
+        var rotSelect = document.createElement('select');
+        rotSelect.id = 'camera_rotation_select';
+        rotSelect.style.cssText = selectStyle;
+        var savedRot = localStorage.getItem(PREF_ROTATION) || '0';
+        [
+            { value: '0', label: '0\u00B0 (No rotation)' },
+            { value: '90', label: '90\u00B0 (Clockwise)' },
+            { value: '180', label: '180\u00B0 (Upside down)' },
+            { value: '270', label: '270\u00B0 (Counter-clockwise)' }
+        ].forEach(function(opt) {
+            var option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (opt.value === savedRot) option.selected = true;
+            rotSelect.appendChild(option);
+        });
+        rotSelect.addEventListener('change', function() {
+            localStorage.setItem(PREF_ROTATION, this.value);
+            applyVideoRotation();
+        });
+        container.appendChild(rotSelect);
     }
 
     // ---- Hooks ----
@@ -636,6 +759,8 @@
         toggleLive: window.toggleLiveGenerate,
         stop: stopLiveGenerate,
         getState: function() { return liveState; },
-        getTargets: function() { return Array.from(cameraTargets); }
+        getTargets: function() { return Array.from(cameraTargets); },
+        getAverageGenerationTime: getAverageGenerationTime,
+        getGenerationStartTime: function() { return generationStartTime; }
     };
 })();
