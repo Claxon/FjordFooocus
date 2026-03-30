@@ -58,10 +58,24 @@ def _destroy_session(token: str):
         _sessions.pop(token, None)
 
 
+def _extract_token(request: Request) -> str | None:
+    """Extract session token from Authorization header, query param, or cookie.
+    Checks in order: Bearer token header, ?token= query param, cookie.
+    The query param is needed for <img src=...> URLs that can't send headers."""
+    auth = request.headers.get('authorization', '')
+    if auth.startswith('Bearer '):
+        return auth[7:]
+    token = request.query_params.get('token')
+    if token:
+        return token
+    return request.cookies.get('gallery_session')
+
+
 def _require_auth(request: Request) -> str:
-    """FastAPI dependency: extract and validate gallery session cookie.
+    """FastAPI dependency: extract and validate gallery session token.
+    Accepts Bearer token in Authorization header or gallery_session cookie.
     Returns the username. Raises 401 if not authenticated."""
-    token = request.cookies.get('gallery_session')
+    token = _extract_token(request)
     user = _get_session_user(token)
     if not user:
         raise HTTPException(status_code=401, detail='Not authenticated')
@@ -551,7 +565,9 @@ def create_app():
             key='gallery_session', value=token,
             httponly=True, samesite='lax', max_age=86400 * 7,
         )
-        return {"ok": True, "username": msg}
+        # Return token in body so JS can use it in Authorization headers
+        # (cookies may be blocked in cross-port iframe contexts)
+        return {"ok": True, "username": msg, "token": token}
 
     @app.post("/api/guest")
     async def api_guest(response: FastAPIResponse):
@@ -560,18 +576,41 @@ def create_app():
             key='gallery_session', value=token,
             httponly=True, samesite='lax', max_age=86400 * 7,
         )
-        return {"ok": True, "username": "guest"}
+        return {"ok": True, "username": "guest", "token": token}
+
+    @app.get("/embed-login")
+    async def embed_login(request: Request, user: str = Query(...)):
+        """Server-side login for iframe embedding. Passes auth token via URL
+        fragment so the gallery JS can use it in Authorization headers.
+        Cookies alone are unreliable in cross-port iframes due to browser
+        third-party cookie partitioning."""
+        host = request.client.host if request.client else ''
+        if host not in ('127.0.0.1', '::1', 'localhost'):
+            raise HTTPException(status_code=403, detail='Embed auth only from localhost')
+        if not user or not user.strip():
+            raise HTTPException(status_code=400, detail='User required')
+        token = _create_session(user.strip())
+        # Pass token in URL query param; the gallery JS will extract it and
+        # use it as a Bearer token in Authorization headers for API calls.
+        response = FastAPIResponse(status_code=302)
+        response.headers['location'] = f'/?embed=1&token={token}'
+        # Also set cookie as fallback for same-origin access
+        response.set_cookie(
+            key='gallery_session', value=token,
+            httponly=True, samesite='lax', max_age=86400 * 7,
+        )
+        return response
 
     @app.post("/api/logout")
     async def api_logout(request: Request, response: FastAPIResponse):
-        token = request.cookies.get('gallery_session')
+        token = _extract_token(request)
         _destroy_session(token)
         response.delete_cookie('gallery_session')
         return {"ok": True}
 
     @app.get("/api/me")
     async def api_me(request: Request):
-        token = request.cookies.get('gallery_session')
+        token = _extract_token(request)
         user = _get_session_user(token)
         if not user:
             return {"authenticated": False}

@@ -486,6 +486,17 @@ input, select { font: inherit; color: inherit; }
   .fs-rating-bar { display: none; }
   .hover-preview { display: none; }
 }
+
+/* ===== Embed mode (iframe inside main app) ===== */
+.embed-mode .toolbar .logo,
+.embed-mode .toolbar .user-label,
+.embed-mode .toolbar .logout-btn {
+  display: none !important;
+}
+.embed-mode .toolbar {
+  padding: 4px 8px;
+  min-height: 0;
+}
 </style>
 </head>
 <body>
@@ -689,11 +700,19 @@ const dom = {
   calPrevMonth: $('#calPrevMonth'), calNextMonth: $('#calNextMonth'),
 };
 
+// ===== Auth token (used instead of cookies in iframe/cross-port contexts) =====
+let _authToken = null;
+
 // ===== API helpers =====
-async function api(path, opts) {
+async function api(path, opts = {}) {
+  // Inject Authorization header if we have a token (iframe cookie workaround)
+  if (_authToken) {
+    opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + _authToken };
+  }
   const res = await fetch(API + path, { credentials: 'same-origin', ...opts });
   if (res.status === 401) {
     loggedInUser = null;
+    _authToken = null;
     showLoginPage();
     throw new Error('Not authenticated');
   }
@@ -738,6 +757,7 @@ async function doLogin() {
       return;
     }
     loggedInUser = data.username;
+    _authToken = data.token || null;
     dom.userLabel.textContent = loggedInUser;
     hideLoginPage();
     await loadGallery();
@@ -761,6 +781,7 @@ async function doGuest() {
       return;
     }
     loggedInUser = data.username;
+    _authToken = data.token || null;
     dom.userLabel.textContent = loggedInUser;
     hideLoginPage();
     await loadGallery();
@@ -774,12 +795,17 @@ async function doGuest() {
 async function doLogout() {
   try { await apiPost('/api/logout', {}); } catch (e) { /* ignore */ }
   loggedInUser = null;
+  _authToken = null;
   showLoginPage();
 }
 
 async function checkAuth() {
   try {
-    const res = await fetch(API + '/api/me', { credentials: 'same-origin' });
+    const opts = { credentials: 'same-origin' };
+    if (_authToken) {
+      opts.headers = { 'Authorization': 'Bearer ' + _authToken };
+    }
+    const res = await fetch(API + '/api/me', opts);
     const data = await res.json();
     if (data.authenticated) {
       loggedInUser = data.username;
@@ -790,8 +816,16 @@ async function checkAuth() {
   return false;
 }
 
-function thumbUrl(path) { return `${API}/api/thumbnail?path=${encodeURIComponent(path)}&size=300`; }
-function imageUrl(path) { return `${API}/api/image?path=${encodeURIComponent(path)}`; }
+function thumbUrl(path) {
+  let url = `${API}/api/thumbnail?path=${encodeURIComponent(path)}&size=300`;
+  if (_authToken) url += `&token=${encodeURIComponent(_authToken)}`;
+  return url;
+}
+function imageUrl(path) {
+  let url = `${API}/api/image?path=${encodeURIComponent(path)}`;
+  if (_authToken) url += `&token=${encodeURIComponent(_authToken)}`;
+  return url;
+}
 
 // ===== Date range helpers =====
 function getDateRange() {
@@ -819,7 +853,27 @@ function buildApiParams() {
 }
 
 // ===== Init =====
+const urlParams = new URLSearchParams(window.location.search);
+const isEmbedMode = urlParams.has('embed');
+
 async function init() {
+  // In embed mode, add class for CSS adjustments
+  if (isEmbedMode) {
+    document.body.classList.add('embed-mode');
+  }
+
+  // Extract auth token from URL params (set by /embed-login redirect).
+  // This is the primary auth mechanism for iframe embeds since browsers
+  // block third-party cookies in cross-port iframe contexts.
+  const urlToken = urlParams.get('token');
+  if (urlToken) {
+    _authToken = urlToken;
+    // Clean the token from the URL to avoid leaking it in the address bar
+    const cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('token');
+    window.history.replaceState({}, '', cleanUrl.toString());
+  }
+
   // Setup login event listeners
   dom.loginBtn.addEventListener('click', doLogin);
   dom.guestBtn.addEventListener('click', doGuest);
@@ -827,7 +881,7 @@ async function init() {
   dom.loginUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') dom.loginPass.focus(); });
   dom.logoutBtn.addEventListener('click', doLogout);
 
-  // Check if already authenticated (cookie exists)
+  // Check if already authenticated (token from URL or cookie)
   const authed = await checkAuth();
   if (!authed) {
     showLoginPage();
@@ -835,6 +889,11 @@ async function init() {
   }
   hideLoginPage();
   await loadGallery();
+
+  // In embed mode, expose refresh function for the parent frame
+  if (isEmbedMode) {
+    window.loadImages = function() { loadGallery(); };
+  }
 }
 
 async function loadGallery() {
