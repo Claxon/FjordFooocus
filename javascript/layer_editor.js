@@ -2709,17 +2709,14 @@ function captureGradioResult(activeLayer) {
 
     // Strategy 3: Check all gallery images — newest is typically the FIRST thumbnail
     // but may also be the last depending on gallery order. Try to find by checking
-    // the progress_gallery first (shows results during generation), then fall back
+    // the live preview first (shows results during generation), then fall back
     // to the first image in main gallery that differs from pre-generation state.
     if (!resultSrc) {
-        // Check progress gallery (always shows the latest result)
-        const progressImgs = document.querySelectorAll('#progress_gallery img');
-        for (const img of progressImgs) {
-            if (img.src && !img.src.includes('data:')) {
-                resultSrc = img.src;
-                console.log('[LE] Found result via progress gallery');
-                break;
-            }
+        // Check live preview (shows the latest result during generation)
+        const livePreviewImg = document.querySelector('.live-preview-item .live-preview-img');
+        if (livePreviewImg && livePreviewImg.src && !livePreviewImg.src.includes('data:')) {
+            resultSrc = livePreviewImg.src;
+            console.log('[LE] Found result via live preview');
         }
     }
     if (!resultSrc) {

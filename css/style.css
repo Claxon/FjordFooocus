@@ -1074,8 +1074,27 @@ div:has(> #positive_prompt) {
     margin-top: 1px;
 }
 
+/* ===== Gallery Iframe ===== */
+#gallery_iframe_wrap {
+  padding: 0 !important;
+}
+#gallery_iframe_wrap > .wrap {
+  padding: 0 !important;
+  min-height: 0 !important;
+}
+#gallery_iframe {
+  display: block;
+  border-radius: 8px;
+}
+/* Hide the data-only Gradio gallery */
+#final_gallery {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* ===== Gallery Batch Groups ===== */
-.grid-container.has-batch-groups {
+#final_gallery .grid-container.has-batch-groups {
   display: flex !important;
   flex-direction: column !important;
   gap: 10px !important;
@@ -1144,9 +1163,9 @@ div:has(> #positive_prompt) {
 }
 .batch-group-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 8px;
 }
 .batch-group-grid > .thumbnail-item {
   position: relative;
@@ -1166,6 +1185,85 @@ div:has(> #positive_prompt) {
 .batch-nav-btn:hover {
   background: var(--background-fill-primary, #2a2a3e);
   color: var(--body-text-color, #e0e0e0);
+}
+
+/* --- Live Preview (floating overlay during generation) --- */
+.live-preview-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+  border: 2px solid #00bcd4;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a0a1a;
+  animation: live-preview-pulse 2s ease-in-out infinite;
+  transition: opacity 0.4s ease;
+  max-width: 280px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+}
+.live-preview-overlay.live-preview-fade-out {
+  opacity: 0;
+}
+@keyframes live-preview-pulse {
+  0%, 100% { border-color: #00bcd4; box-shadow: 0 4px 24px rgba(0,188,212,0.3); }
+  50% { border-color: #26c6da; box-shadow: 0 4px 24px rgba(0,188,212,0.5); }
+}
+.live-preview-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: #e53935;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 5;
+  text-transform: uppercase;
+}
+.live-preview-img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+  background: #0a0a1a;
+}
+.live-preview-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(0,0,0,0.5);
+}
+.live-preview-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00bcd4, #26c6da);
+  transition: width 0.3s ease;
+}
+.live-preview-status {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.6);
+  padding: 2px 6px;
+  border-radius: 3px;
+  z-index: 5;
+}
+
+/* Hide the live_preview_data pipe element (off-screen so Gradio still updates the <img>) */
+#live_preview_data {
+  position: fixed !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* --- Page switching (JS-driven, not Gradio visibility) --- */

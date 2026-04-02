@@ -161,16 +161,13 @@
     // ---- Image source helpers ----
 
     function getProgressWindowImage() {
-        var pw = document.getElementById('preview_image');
+        // Check inline live preview first
+        var lp = document.querySelector('.live-preview-item .live-preview-img');
+        if (lp && lp.src && lp.src !== window.location.href) return lp;
+
+        // Fallback to hidden live_preview_data pipe
+        var pw = document.getElementById('live_preview_data');
         if (!pw) return null;
-
-        var el = pw;
-        while (el && el !== document.body) {
-            var style = el.style;
-            if (style && style.display === 'none') return null;
-            el = el.parentElement;
-        }
-
         var img = pw.querySelector('img');
         return (img && img.src) ? img : null;
     }

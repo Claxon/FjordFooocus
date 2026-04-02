@@ -38,7 +38,7 @@ def generate_clicked(task: worker.AsyncTask, session_imgs=None):
 
     with model_management.interrupt_processing_mutex:
         model_management.interrupt_processing = False
-    # outputs=[progress_html, progress_window, progress_gallery, gallery]
+    # outputs=[progress_html, live_preview_data, gallery]
 
     if len(task.args) == 0:
         return
@@ -47,9 +47,8 @@ def generate_clicked(task: worker.AsyncTask, session_imgs=None):
     finished = False
 
     yield gr.update(visible=True, value=modules.html.make_progress_html(1, 'Waiting for task to start ...')), \
-        gr.update(visible=True, value=None), \
-        gr.update(visible=False, value=None), \
-        gr.update(visible=False)
+        gr.update(value=None), \
+        gr.update()
 
     worker.async_tasks.append(task)
 
@@ -62,19 +61,16 @@ def generate_clicked(task: worker.AsyncTask, session_imgs=None):
                 # help bad internet connection by skipping duplicated preview
                 if len(task.yields) > 0:  # if we have the next item
                     if task.yields[0][0] == 'preview':   # if the next item is also a preview
-                        # print('Skipped one preview for better internet connection.')
                         continue
 
                 percentage, title, image = product
                 yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
-                    gr.update(visible=True, value=image) if image is not None else gr.update(), \
-                    gr.update(), \
-                    gr.update(visible=False)
+                    gr.update(value=image) if image is not None else gr.update(), \
+                    gr.update()
             if flag == 'results':
                 yield gr.update(visible=True), \
-                    gr.update(visible=True), \
-                    gr.update(visible=True, value=product), \
-                    gr.update(visible=False)
+                    gr.update(), \
+                    gr.update()
             if flag == 'finish':
                 if not args_manager.args.disable_enhance_output_sorting:
                     product = sort_enhance_images(product, task)
@@ -84,9 +80,8 @@ def generate_clicked(task: worker.AsyncTask, session_imgs=None):
                 accumulated = product + previous
 
                 yield gr.update(visible=False), \
-                    gr.update(visible=False), \
-                    gr.update(visible=False), \
-                    gr.update(visible=True, value=accumulated)
+                    gr.update(value=None), \
+                    gr.update(value=accumulated)
                 finished = True
 
                 # delete Fooocus temp images, only keep gradio temp images
@@ -255,16 +250,15 @@ with shared.gradio_root:
     # ======================== MAIN APP (hidden until login) ========================
     with gr.Row(elem_id='main_app', elem_classes=['page-hidden']) as main_app:
         with gr.Column(scale=2):
-            with gr.Row():
-                progress_window = grh.Image(label='Preview', show_label=True, visible=False, height=768,
-                                            elem_id='preview_image', elem_classes=['main_view'])
-                progress_gallery = gr.Gallery(label='Finished Images', show_label=True, object_fit='contain',
-                                              height=768, visible=False, elem_id='progress_gallery',
-                                              elem_classes=['main_view', 'image_gallery'])
             progress_html = gr.HTML(value=modules.html.make_progress_html(32, 'Progress 32%'), visible=False,
                                     elem_id='progress-bar', elem_classes='progress-bar')
-            gallery = gr.Gallery(label='Gallery', show_label=False, object_fit='contain', visible=True, height=768,
-                                 elem_classes=['resizable_area', 'main_view', 'final_gallery', 'image_gallery'],
+            live_preview_data = gr.Image(visible=True, elem_id='live_preview_data')
+            gr.HTML(value='<iframe id="gallery_iframe" '
+                          'style="width:100%;border:none;background:#0a0f1a;" class="main_view"></iframe>',
+                    elem_id='gallery_iframe_wrap')
+            gallery = gr.Gallery(label='Gallery', show_label=False, object_fit='cover',
+                                 columns=4, rows=None, visible=False, height=0,
+                                 elem_classes=['final_gallery', 'image_gallery'],
                                  elem_id='final_gallery')
             delete_image_request = gr.Textbox(elem_id='delete_image_request', visible=False)
             approve_images_request = gr.Textbox(elem_id='approve_images_request', visible=False)
@@ -273,9 +267,9 @@ with shared.gradio_root:
             layer_editor_result = gr.Textbox(elem_id='layer_editor_result', visible=False)
             with gr.Row(elem_id='layer_editor_toggle_row'):
                 layer_editor_toggle = gr.Button(value='\U0001f3a8 Layer Editor', elem_id='layer_editor_toggle', elem_classes='type_row_half')
-            with gr.Row(elem_id='session_batch_nav_row'):
+            with gr.Row(elem_id='session_batch_nav_row', visible=False):
                 gr.HTML(elem_id='session_batch_nav', value='<div id="session_batch_nav"></div>')
-            gr.HTML(elem_id='batch_prompt_display_wrap', value='<div id="batch_prompt_display"></div>')
+            gr.HTML(elem_id='batch_prompt_display_wrap', value='<div id="batch_prompt_display"></div>', visible=False)
             with gr.Row():
                 with gr.Column(scale=17):
                     prompt = gr.Textbox(show_label=False, placeholder="Type prompt here or paste parameters.", elem_id='positive_prompt',
@@ -1310,6 +1304,13 @@ with shared.gradio_root:
             document.getElementById('login_page').classList.add('page-hidden');
             document.getElementById('admin_page').classList.add('page-hidden');
             document.getElementById('main_app').classList.remove('page-hidden');
+            // Auto-authenticate gallery iframe via server-side redirect
+            setTimeout(function() {
+                var profileEl = document.querySelector('#profile_input textarea, #profile_input input');
+                var user = (profileEl && profileEl.value) ? profileEl.value.trim() : 'guest';
+                var iframe = document.getElementById('gallery_iframe');
+                if (iframe) iframe.src = 'http://127.0.0.1:7867/embed-login?user=' + encodeURIComponent(user);
+            }, 100);
         }"""
         _switch_to_login_js = """
         () => {
@@ -1404,17 +1405,18 @@ with shared.gradio_root:
         # if login_message got an error before switching pages.
         _login_success_js = """
         () => {
-            // Small delay to let Gradio update the DOM with server response
             setTimeout(() => {
                 var msg = document.querySelector('#login_message');
                 if (msg && msg.textContent && msg.textContent.trim() !== '' && msg.querySelector('[style*="ff4444"]')) {
-                    return; // error message shown — stay on login page
+                    return;
                 }
                 var profileEl = document.querySelector('#profile_input textarea, #profile_input input');
                 if (profileEl && profileEl.value && profileEl.value.trim()) {
                     document.getElementById('login_page').classList.add('page-hidden');
                     document.getElementById('admin_page').classList.add('page-hidden');
                     document.getElementById('main_app').classList.remove('page-hidden');
+                    var iframe = document.getElementById('gallery_iframe');
+                    if (iframe) iframe.src = 'http://127.0.0.1:7867/embed-login?user=' + encodeURIComponent(profileEl.value.trim());
                 }
             }, 150);
         }"""
@@ -2350,11 +2352,11 @@ with shared.gradio_root:
             new_batches = session_batches + [{'count': len(new_images), 'prompt': current_prompt or '', 'preview': prompt_preview, 'time': batch_time}]
             return accumulated, new_batches
 
-        generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False), True),
-                              outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
+        generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), True),
+                              outputs=[stop_button, skip_button, generate_button, state_is_generating]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
             .then(fn=get_task, inputs=ctrls, outputs=currentTask) \
-            .then(fn=generate_clicked, inputs=[currentTask, session_gallery_state], outputs=[progress_html, progress_window, progress_gallery, gallery]) \
+            .then(fn=generate_clicked, inputs=[currentTask, session_gallery_state], outputs=[progress_html, live_preview_data, gallery]) \
             .then(fn=accumulate_results, inputs=[session_gallery_state, session_batch_state, currentTask, prompt], outputs=[session_gallery_state, session_batch_state]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
@@ -2367,11 +2369,11 @@ with shared.gradio_root:
                   queue=False, show_progress=False)
 
         reset_button.click(lambda: [worker.AsyncTask(args=[]), False, gr.update(visible=True, interactive=True)] +
-                                   [gr.update(visible=False)] * 6 +
-                                   [gr.update(visible=True, value=[]), [], []],
+                                   [gr.update(visible=False)] * 4 +
+                                   [gr.update(value=None), gr.update(visible=True, value=[]), [], []],
                            outputs=[currentTask, state_is_generating, generate_button,
                                     reset_button, stop_button, skip_button,
-                                    progress_html, progress_window, progress_gallery, gallery,
+                                    progress_html, live_preview_data, gallery,
                                     session_gallery_state, session_batch_state],
                            queue=False)
 

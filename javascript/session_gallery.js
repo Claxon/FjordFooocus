@@ -12,12 +12,14 @@
 
     function getGalleryButtons() {
         // Thumbnails may be nested inside .batch-group-grid containers or flat in grid-container
-        return Array.from(document.querySelectorAll('#final_gallery .grid-container .thumbnail-item'));
+        // Exclude the live preview element
+        return Array.from(document.querySelectorAll('#final_gallery .grid-container .thumbnail-item:not(.live-preview-item)'));
     }
 
     function getFlatGalleryButtons() {
         // Only direct children of grid-container (before grouping)
-        return Array.from(document.querySelectorAll('#final_gallery .grid-container > .thumbnail-item'));
+        // Exclude the live preview element
+        return Array.from(document.querySelectorAll('#final_gallery .grid-container > .thumbnail-item:not(.live-preview-item)'));
     }
 
     function getCurrentPrompt() {

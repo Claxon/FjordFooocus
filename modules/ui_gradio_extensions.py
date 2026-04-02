@@ -43,6 +43,8 @@ def javascript_html():
     head += f'<script type="text/javascript" src="{clipboard_paste_js_path}"></script>\n'
     profile_topic_js_path = webpath('javascript/profile_topic.js')
     head += f'<script type="text/javascript" src="{profile_topic_js_path}"></script>\n'
+    live_preview_js_path = webpath('javascript/live_preview.js')
+    head += f'<script type="text/javascript" src="{live_preview_js_path}"></script>\n'
     session_gallery_js_path = webpath('javascript/session_gallery.js')
     head += f'<script type="text/javascript" src="{session_gallery_js_path}"></script>\n'
     queue_manager_js_path = webpath('javascript/queue_manager.js')
@@ -57,6 +59,8 @@ def javascript_html():
     head += f'<script type="text/javascript" src="{login_js_path}"></script>\n'
     regenerate_js_path = webpath('javascript/regenerate.js')
     head += f'<script type="text/javascript" src="{regenerate_js_path}"></script>\n'
+    gallery_overlay_js_path = webpath('javascript/gallery_overlay.js')
+    head += f'<script type="text/javascript" src="{gallery_overlay_js_path}"></script>\n'
     head += f'<meta name="samples-path" content="{samples_path}">\n'
 
     if args_manager.args.theme:

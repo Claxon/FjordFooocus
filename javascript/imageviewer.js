@@ -38,8 +38,7 @@ function updateOnBackgroundChange() {
     }
 }
 
-// Get all visible gallery thumbnail buttons from both grid and thumbnail views,
-// across both the progress gallery and the final gallery
+// Get all visible gallery thumbnail buttons from both grid and thumbnail views
 function all_gallery_buttons() {
     var allGalleryButtons = gradioApp().querySelectorAll(
         '.image_gallery .thumbnails > .thumbnail-item.thumbnail-small, ' +
