@@ -236,6 +236,28 @@ input, select { font: inherit; color: inherit; }
 }
 .thumb-card img[data-src] { opacity: 0; transition: opacity 0.3s; }
 .thumb-card img.loaded { opacity: 1; }
+.thumb-card .video-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 3;
+  background: rgba(0,0,0,0.7); color: #fff; border-radius: 4px;
+  padding: 2px 6px; font-size: 10px; font-weight: 600; pointer-events: none;
+  display: flex; align-items: center; gap: 3px;
+}
+.thumb-card .video-badge::before { content: '\25B6'; font-size: 8px; }
+
+/* Video in hover preview */
+.hover-preview video {
+  display: block; max-width: 480px; max-height: 480px; object-fit: contain;
+}
+
+/* Video in fullscreen */
+.fs-image-container video {
+  max-width: 100%; max-height: 100%; object-fit: contain; user-select: none;
+}
+
+/* Video in photoframe */
+.photoframe-canvas .pf-cell video {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+}
 
 /* Thumb overlays */
 .thumb-star {
@@ -318,16 +340,15 @@ input, select { font: inherit; color: inherit; }
 /* ===== Hover preview ===== */
 .hover-preview {
   position: fixed; bottom: 36px; right: 12px; z-index: 90;
-  max-width: 280px; max-height: 280px; border-radius: 8px;
+  max-width: 480px; max-height: 480px; border-radius: 8px;
   border: 1px solid #444; background: #0f1629;
   box-shadow: 0 8px 24px rgba(0,0,0,0.6);
   pointer-events: none; opacity: 0; transition: opacity 0.15s;
   overflow: hidden;
 }
 .hover-preview.visible { opacity: 1; }
-.select-mode .hover-preview { display: none; }
 .hover-preview img {
-  display: block; max-width: 280px; max-height: 280px; object-fit: contain;
+  display: block; max-width: 480px; max-height: 480px; object-fit: contain;
 }
 
 /* ===== Last-viewed highlight ===== */
@@ -471,8 +492,8 @@ input, select { font: inherit; color: inherit; }
   width: 50px; padding: 2px 4px; border-radius: 4px; border: 1px solid #444;
   background: #0f1629; text-align: center; font-size: 12px;
 }
-.fs-image-container img { transition: opacity 0.4s ease; }
-.fs-image-container img.fading { opacity: 0; }
+.fs-image-container img, .fs-image-container video { transition: opacity 0.4s ease; }
+.fs-image-container img.fading, .fs-image-container video.fading { opacity: 0; }
 
 /* ===== Responsive ===== */
 @media (max-width: 600px) {
@@ -497,6 +518,80 @@ input, select { font: inherit; color: inherit; }
   padding: 4px 8px;
   min-height: 0;
 }
+
+/* ===== Browse Mode ===== */
+.toolbar .browse-btn {
+  padding: 3px 10px; border-radius: 16px; font-size: 12px;
+  background: #2a2a4a; color: #c4b5fd; cursor: pointer; transition: background 0.15s;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;
+}
+.toolbar .browse-btn:hover { background: #3b2d5e; }
+
+/* Browse indicator bar (replaces day-nav in browse mode) */
+.browse-nav {
+  display: none; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 12px; background: #16213e; border-bottom: 1px solid #333;
+  font-size: 13px; color: #c4b5fd;
+}
+.browse-nav.active { display: flex; }
+.browse-nav .browse-path {
+  max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: monospace; font-size: 12px; color: #86efac;
+}
+.browse-nav .browse-close {
+  width: 20px; height: 20px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-size: 14px;
+  cursor: pointer; background: #2a2a4a; color: #aaa; transition: background 0.15s;
+}
+.browse-nav .browse-close:hover { background: #4a1a1a; color: #ff6b6b; }
+.browse-nav .browse-count { font-size: 12px; color: #888; }
+
+
+/* Load more button */
+.load-more-row {
+  display: flex; justify-content: center; padding: 16px; width: 100%;
+}
+.load-more-btn {
+  padding: 8px 24px; border-radius: 8px; background: #2a2a4a; color: #c4b5fd;
+  font-size: 13px; cursor: pointer; border: none; transition: background 0.15s;
+}
+.load-more-btn:hover { background: #3b2d5e; }
+
+/* Batch slideshow & photoframe buttons */
+.batch-btn.slideshow-sel-btn { background: #1e3a5f; color: #7dd3fc; }
+.batch-btn.slideshow-sel-btn:hover { background: #2a4a6f; }
+.batch-btn.photoframe-btn { background: #3b1f5e; color: #c4b5fd; }
+.batch-btn.photoframe-btn:hover { background: #4b2f6e; }
+
+/* ===== Photoframe Overlay ===== */
+.photoframe-overlay {
+  position: fixed; inset: 0; z-index: 10000; background: #111;
+  display: none; flex-direction: column;
+}
+.photoframe-overlay.open { display: flex; }
+.photoframe-header {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  background: #1a1a2e; border-bottom: 1px solid #333; flex-shrink: 0;
+}
+.photoframe-header .pf-title {
+  font-size: 14px; color: #c4b5fd; font-weight: 600;
+}
+.photoframe-header .pf-close {
+  margin-left: auto; font-size: 22px; padding: 4px 8px; cursor: pointer;
+  color: #aaa; transition: color 0.15s;
+}
+.photoframe-header .pf-close:hover { color: #fff; }
+.photoframe-canvas {
+  flex: 1; overflow: hidden; position: relative;
+}
+.photoframe-canvas .pf-cell {
+  position: absolute; overflow: hidden; display: flex;
+  align-items: center; justify-content: center; background: #0a0a0a;
+  border: 1px solid #222;
+}
+.photoframe-canvas .pf-cell img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+}
 </style>
 </head>
 <body>
@@ -519,6 +614,7 @@ input, select { font: inherit; color: inherit; }
 <!-- Toolbar -->
 <div class="toolbar">
   <span class="logo">FjordFooocus Gallery</span>
+  <button class="browse-btn" id="browseBtn" title="Open a folder from disk">&#128193; Open Folder</button>
   <div class="filter-bar" id="filterBar">
     <!-- Capsules rendered dynamically -->
     <div class="add-filter-wrap">
@@ -536,6 +632,8 @@ input, select { font: inherit; color: inherit; }
     <button class="batch-btn rate-btn" id="batchRate4" title="Rate 4">4</button>
     <button class="batch-btn rate-btn" id="batchRate5" title="Rate 5">5</button>
     <button class="batch-btn delete-btn" id="batchDelete" title="Delete (Del)">Delete</button>
+    <button class="batch-btn slideshow-sel-btn" id="batchSlideshow" title="Slideshow selected images">&#9654; Slideshow</button>
+    <button class="batch-btn photoframe-btn" id="batchPhotoframe" title="Arrange selected as photo collage">&#9638; Photoframe</button>
   </div>
   <input type="text" class="toolbar-search" id="searchInput" placeholder="Search...">
   <button class="select-toggle" id="selectToggle" title="Multi-select (Ctrl+click) / Esc to cancel">Select</button>
@@ -548,6 +646,14 @@ input, select { font: inherit; color: inherit; }
   <button id="prevDay" title="Previous day">&lsaquo;</button>
   <span class="day-label" id="dayLabel">Loading...</span>
   <button id="nextDay" title="Next day">&rsaquo;</button>
+</div>
+
+<!-- Browse Mode Indicator (replaces day-nav when browsing) -->
+<div class="browse-nav" id="browseNav">
+  <span>&#128193; Browsing:</span>
+  <span class="browse-path" id="browsePath"></span>
+  <span class="browse-count" id="browseCount"></span>
+  <button class="browse-close" id="browseClose" title="Exit browse mode">&times;</button>
 </div>
 
 <!-- Calendar Popup -->
@@ -635,6 +741,15 @@ input, select { font: inherit; color: inherit; }
   </div>
 </div>
 
+<!-- Photoframe Overlay -->
+<div class="photoframe-overlay" id="photoframeOverlay">
+  <div class="photoframe-header">
+    <span class="pf-title">&#9638; Photoframe</span>
+    <button class="pf-close" id="pfClose" title="Close (Esc)">&times;</button>
+  </div>
+  <div class="photoframe-canvas" id="pfCanvas"></div>
+</div>
+
 <script>
 (function() {
 'use strict';
@@ -659,6 +774,13 @@ let slideshowActive = false;
 let infoPanelContext = null;
 let infoPanelImagePath = null;
 let calViewDate = null; // Date object for the calendar month being viewed
+let zoomController = null; // zoom/pan controller for fullscreen viewer
+
+// Browse mode state
+let browseDir = null;       // null = normal gallery mode, string = directory being browsed
+let browseTotal = 0;        // total images found in browsed directory
+let browseOffset = 0;       // pagination offset for browse mode
+let browseTruncated = false; // whether scan was truncated
 
 // Filter capsule state
 let availableTopics = [];
@@ -683,7 +805,7 @@ const dom = {
   prevDay: $('#prevDay'), nextDay: $('#nextDay'), dayLabel: $('#dayLabel'),
   grid: $('#grid'), gridContainer: $('#gridContainer'),
   batchActions: $('#batchActions'), batchCount: $('#batchCount'),
-  hoverPreview: $('#hoverPreview'), hoverPreviewImg: $('#hoverPreviewImg'),
+  hoverPreview: $('#hoverPreview'),
   statusText: $('#statusText'), statusRight: $('#statusRight'),
   fullscreen: $('#fullscreen'), fsImage: $('#fsImage'), fsFilename: $('#fsFilename'),
   fsStar: $('#fsStar'), fsDelete: $('#fsDelete'), fsInfo: $('#fsInfo'),
@@ -698,6 +820,12 @@ const dom = {
   calendarOverlay: $('#calendarOverlay'), calendarPopup: $('#calendarPopup'),
   calGrid: $('#calGrid'), calTitle: $('#calTitle'),
   calPrevMonth: $('#calPrevMonth'), calNextMonth: $('#calNextMonth'),
+  // Browse mode
+  browseBtn: $('#browseBtn'), browseNav: $('#browseNav'), browsePath: $('#browsePath'),
+  browseCount: $('#browseCount'), browseClose: $('#browseClose'),
+  // Photoframe
+  photoframeOverlay: $('#photoframeOverlay'), pfCanvas: $('#pfCanvas'),
+  pfClose: $('#pfClose'),
 };
 
 // ===== Auth token (used instead of cookies in iframe/cross-port contexts) =====
@@ -826,6 +954,9 @@ function imageUrl(path) {
   if (_authToken) url += `&token=${encodeURIComponent(_authToken)}`;
   return url;
 }
+function isVideo(item) {
+  return item && item.is_video;
+}
 
 // ===== Date range helpers =====
 function getDateRange() {
@@ -929,11 +1060,10 @@ async function loadDates() {
       const params = buildApiParams();
       allDates = await api(`/api/dates?${params}`);
     }
-    if (allDates.length === 0) {
-      currentDateIdx = -1;
-      showEmpty('No images found for these filters');
-      updateDayNav();
-      return;
+    // Always ensure today is in the list so the gallery starts on the current day
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (allDates.length === 0 || allDates[0].date !== todayStr) {
+      allDates.unshift({ date: todayStr, count: 0 });
     }
     currentDateIdx = 0;
     updateDayNav();
@@ -973,6 +1103,12 @@ async function loadCurrentDay() {
 
 function applyLocalFilters(images) {
   let result = images;
+  // In browse mode, apply search as a client-side filename filter
+  if (browseDir && filters.search) {
+    const q = filters.search.toLowerCase();
+    result = result.filter(i => i.filename.toLowerCase().includes(q) ||
+      (i.subfolder && i.subfolder.toLowerCase().includes(q)));
+  }
   // Rating filters
   for (const rf of filters.ratings) {
     if (rf === 'starred') result = result.filter(i => i.starred);
@@ -1051,7 +1187,13 @@ function addCapsule(type, text, onRemove, beforeEl) {
 
 function onFiltersChanged() {
   renderCapsules();
-  loadDates();
+  if (browseDir) {
+    // In browse mode, just re-apply client-side filters
+    renderGrid(applyLocalFilters(currentImages));
+    updateBrowseStatus();
+  } else {
+    loadDates();
+  }
 }
 
 // ===== Filter dropdown =====
@@ -1126,6 +1268,7 @@ function updateDayNav() {
 }
 
 function navigateDay(offset) {
+  if (browseDir) return; // no day navigation in browse mode
   // offset -1 = newer (lower index), +1 = older (higher index)
   const newIdx = currentDateIdx + offset;
   if (newIdx < 0 || newIdx >= allDates.length) return;
@@ -1151,8 +1294,16 @@ function renderGrid(images) {
     const imgEl = document.createElement('img');
     imgEl.dataset.src = thumbUrl(img.path);
     imgEl.alt = img.filename;
-    imgEl.title = img.filename;
+    imgEl.title = img.subfolder ? `${img.subfolder}/${img.filename}` : img.filename;
     card.appendChild(imgEl);
+
+    // Video badge
+    if (isVideo(img)) {
+      const badge = document.createElement('span');
+      badge.className = 'video-badge';
+      badge.textContent = 'VIDEO';
+      card.appendChild(badge);
+    }
 
     // Star
     const star = document.createElement('button');
@@ -1198,12 +1349,27 @@ function renderGrid(images) {
     // Hover tracking for keyboard rating + preview
     card.addEventListener('mouseenter', () => {
       hoveredCard = img;
-      dom.hoverPreviewImg.src = `${API}/api/thumbnail?path=${encodeURIComponent(img.path)}&size=560`;
+      if (isVideo(img)) {
+        dom.hoverPreview.innerHTML = '';
+        const vid = document.createElement('video');
+        vid.src = imageUrl(img.path);
+        vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
+        dom.hoverPreview.appendChild(vid);
+      } else {
+        dom.hoverPreview.innerHTML = '';
+        const prevImg = document.createElement('img');
+        prevImg.src = `${API}/api/thumbnail?path=${encodeURIComponent(img.path)}&size=560`;
+        if (_authToken) prevImg.src += `&token=${encodeURIComponent(_authToken)}`;
+        dom.hoverPreview.appendChild(prevImg);
+      }
       dom.hoverPreview.classList.add('visible');
     });
     card.addEventListener('mouseleave', () => {
       if (hoveredCard === img) hoveredCard = null;
       dom.hoverPreview.classList.remove('visible');
+      // Stop any video playback
+      const vid = dom.hoverPreview.querySelector('video');
+      if (vid) { vid.pause(); vid.src = ''; }
     });
 
     fragment.appendChild(card);
@@ -1211,6 +1377,8 @@ function renderGrid(images) {
   dom.grid.appendChild(fragment);
   observeImages();
   updateStatus(images.length);
+  // In browse mode, append "Load more" button if there are more images
+  if (browseDir) appendLoadMoreButton();
 }
 
 function showEmpty(msg) {
@@ -1391,9 +1559,6 @@ function confirmDelete(paths, msg) {
 }
 
 // ===== Fullscreen =====
-function getActiveImages() {
-  return applyLocalFilters(currentImages);
-}
 
 function openFullscreen(idx) {
   const images = getActiveImages();
@@ -1401,12 +1566,20 @@ function openFullscreen(idx) {
   dom.grid.querySelectorAll('.thumb-card.last-viewed').forEach(c => c.classList.remove('last-viewed'));
   fsIndex = idx;
   dom.fullscreen.classList.add('open');
+  // Initialize zoom/pan controller for the fullscreen viewer
+  if (zoomController) zoomController.destroy();
+  zoomController = createZoomPanController(dom.fsImageContainer, dom.fsImage);
   showFsImage();
   history.pushState({ view: 'fullscreen', idx }, '', updateHashStr());
 }
 
 function closeFullscreen() {
   stopSlideshow();
+  if (zoomController) { zoomController.destroy(); zoomController = null; }
+  // Clean up any playing video
+  const vid = dom.fsImageContainer.querySelector('video');
+  if (vid) { vid.pause(); vid.src = ''; vid.remove(); }
+  dom.fsImage.style.display = '';
   dom.fullscreen.classList.remove('open');
   dom.fullscreen.classList.remove('info-open');
   closeInfoPanel();
@@ -1427,9 +1600,31 @@ function closeFullscreen() {
 function showFsImage() {
   const images = getActiveImages();
   if (fsIndex < 0 || fsIndex >= images.length) return;
+  if (zoomController) zoomController.reset();
   const img = images[fsIndex];
-  dom.fsImage.src = imageUrl(img.path);
-  dom.fsFilename.textContent = img.filename;
+
+  // Stop any playing video
+  const oldVid = dom.fsImageContainer.querySelector('video');
+  if (oldVid) { oldVid.pause(); oldVid.remove(); }
+
+  if (isVideo(img)) {
+    // Hide the img element, show a video element
+    dom.fsImage.style.display = 'none';
+    const vid = document.createElement('video');
+    vid.id = 'fsVideo';
+    vid.src = imageUrl(img.path);
+    vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
+    vid.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+    // Insert before the next nav button
+    dom.fsImage.parentNode.insertBefore(vid, dom.fsNext);
+    // For slideshow: when video ends, if slideshow is active and not looping for slideshow, advance
+    vid.addEventListener('ended', onFsVideoEnded);
+  } else {
+    dom.fsImage.style.display = '';
+    dom.fsImage.src = imageUrl(img.path);
+  }
+
+  dom.fsFilename.textContent = img.subfolder ? `${img.subfolder}/${img.filename}` : img.filename;
   updateFsStar();
   updateFsRating();
   dom.fsPrev.style.display = fsIndex > 0 ? '' : 'none';
@@ -1559,17 +1754,48 @@ function startSlideshow() {
   slideshowActive = true;
   dom.slideshowToggle.classList.add('active');
   dom.slideshowToggle.innerHTML = '&#9646;&#9646; Pause';
-  const interval = (parseInt(dom.slideshowSpeed.value) || 3) * 1000;
-  // If we have a selection, build slideshow from selected images
   slideshowAdvance();
-  slideshowTimer = setInterval(slideshowAdvance, interval);
+  scheduleSlideshowTimer();
+}
+
+function scheduleSlideshowTimer() {
+  if (!slideshowActive) return;
+  if (slideshowTimer) { clearTimeout(slideshowTimer); slideshowTimer = null; }
+  // Check if current item is a video — if so, don't start a timer;
+  // the video's 'ended' event will drive the next advance.
+  const images = getActiveImages();
+  const current = (fsIndex >= 0 && images[fsIndex]) ? images[fsIndex] : null;
+  if (current && isVideo(current)) {
+    // Video is playing — disable looping so it fires 'ended'
+    const vid = dom.fsImageContainer.querySelector('video');
+    if (vid) vid.loop = false;
+    return; // 'ended' event will call slideshowAdvance
+  }
+  const interval = (parseInt(dom.slideshowSpeed.value) || 3) * 1000;
+  slideshowTimer = setTimeout(() => {
+    slideshowTimer = null;
+    if (slideshowActive) {
+      slideshowAdvance();
+      scheduleSlideshowTimer();
+    }
+  }, interval);
 }
 
 function stopSlideshow() {
   slideshowActive = false;
-  if (slideshowTimer) { clearInterval(slideshowTimer); slideshowTimer = null; }
+  if (slideshowTimer) { clearTimeout(slideshowTimer); slideshowTimer = null; }
   dom.slideshowToggle.classList.remove('active');
   dom.slideshowToggle.innerHTML = '&#9654; Play';
+  // Re-enable looping on any active video
+  const vid = dom.fsImageContainer.querySelector('video');
+  if (vid) vid.loop = true;
+}
+
+function onFsVideoEnded() {
+  if (slideshowActive) {
+    slideshowAdvance();
+    scheduleSlideshowTimer();
+  }
 }
 
 function slideshowAdvance() {
@@ -1593,11 +1819,13 @@ function slideshowAdvance() {
   if (nextIdx === fsIndex) return;
 
   // Fade transition
-  dom.fsImage.classList.add('fading');
+  const fadingEl = dom.fsImageContainer.querySelector('video') || dom.fsImage;
+  fadingEl.classList.add('fading');
   setTimeout(() => {
     fsIndex = nextIdx;
     showFsImage();
-    dom.fsImage.classList.remove('fading');
+    const newEl = dom.fsImageContainer.querySelector('video') || dom.fsImage;
+    newEl.classList.remove('fading');
   }, 400);
 }
 
@@ -1736,7 +1964,13 @@ let searchTimer = null;
 async function doSearch(query) {
   filters.search = (query && query.length >= 2) ? query : '';
   renderCapsules();
-  await loadDates();
+  if (browseDir) {
+    // In browse mode, filter client-side by filename
+    renderGrid(applyLocalFilters(currentImages));
+    updateBrowseStatus();
+  } else {
+    await loadDates();
+  }
 }
 
 // ===== Hash State (browser back/forward) =====
@@ -1746,9 +1980,13 @@ function updateHash() {
 
 function updateHashStr() {
   const params = new URLSearchParams();
-  if (filters.topics.length > 0) params.set('topic', filters.topics.join(','));
-  if (allDates.length > 0 && currentDateIdx >= 0) {
-    params.set('date', allDates[currentDateIdx].date);
+  if (browseDir) {
+    params.set('browse', browseDir);
+  } else {
+    if (filters.topics.length > 0) params.set('topic', filters.topics.join(','));
+    if (allDates.length > 0 && currentDateIdx >= 0) {
+      params.set('date', allDates[currentDateIdx].date);
+    }
   }
   if (filters.search) params.set('search', filters.search);
   if (fsIndex >= 0) {
@@ -1765,6 +2003,15 @@ function readHashState() {
     return;
   }
   const params = new URLSearchParams(hash);
+
+  // Restore browse mode from hash
+  if (params.get('browse')) {
+    openBrowseDir(params.get('browse')).then(() => {
+      if (params.get('image')) openImageByFilename(params.get('image'));
+    });
+    return;
+  }
+
   // Restore filters from hash
   if (params.get('topic')) filters.topics = params.get('topic').split(',').filter(Boolean);
   renderCapsules();
@@ -1811,6 +2058,134 @@ function regenerateImage() {
 }
 
 // ===== Mobile Touch =====
+// ===== Zoom/Pan Controller =====
+function createZoomPanController(container, img) {
+  let scale = 1, tx = 0, ty = 0;
+  let isPanning = false, didPan = false;
+  let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
+  let lastTouchDist = 0, lastTouchCX = 0, lastTouchCY = 0;
+  const ac = new AbortController();
+  const sig = ac.signal;
+
+  function applyTransform() {
+    img.style.transform = scale === 1 && tx === 0 && ty === 0
+      ? '' : `matrix(${scale},0,0,${scale},${tx},${ty})`;
+    container.style.cursor = scale > 1 ? (isPanning ? 'grabbing' : 'grab') : '';
+  }
+
+  function reset() {
+    scale = 1; tx = 0; ty = 0; isPanning = false;
+    applyTransform();
+  }
+
+  // --- Wheel zoom (always centered on cursor) ---
+  container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const cr = container.getBoundingClientRect();
+    const cx = e.clientX - cr.left;
+    const cy = e.clientY - cr.top;
+    const prevScale = scale;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    scale = Math.max(0.1, scale * factor);
+    const ratio = scale / prevScale;
+    tx = cx - (cx - tx) * ratio;
+    ty = cy - (cy - ty) * ratio;
+    applyTransform();
+  }, { passive: false, signal: sig });
+
+  // --- Mouse pan (middle button always, left button when zoomed) ---
+  container.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.fs-nav-btn, .fs-rating-overlay, .fs-rating-btn, button')) return;
+    if (e.button === 1 || (e.button === 0 && scale > 1)) {
+      isPanning = true; didPan = false;
+      panStartX = e.clientX; panStartY = e.clientY;
+      panStartTx = tx; panStartTy = ty;
+      e.preventDefault();
+      applyTransform();
+    }
+  }, { signal: sig });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStartX, dy = e.clientY - panStartY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+    tx = panStartTx + dx;
+    ty = panStartTy + dy;
+    applyTransform();
+  }, { signal: sig });
+
+  document.addEventListener('mouseup', () => {
+    if (isPanning) { isPanning = false; applyTransform(); }
+  }, { signal: sig });
+
+  // --- Touch: pinch zoom + two-finger pan ---
+  function touchDist(t) {
+    return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  }
+
+  container.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      lastTouchDist = touchDist(e.touches);
+      lastTouchCX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      lastTouchCY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    } else if (e.touches.length === 1 && scale > 1) {
+      isPanning = true; didPan = false;
+      panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+      panStartTx = tx; panStartTy = ty;
+      e.preventDefault();
+    }
+  }, { signal: sig });
+
+  container.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = touchDist(e.touches);
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const prevScale = scale;
+      scale = Math.max(0.1, scale * (dist / lastTouchDist));
+      const cr = container.getBoundingClientRect();
+      const ratio = scale / prevScale;
+      tx = cx - cr.left - (cx - cr.left - tx) * ratio;
+      ty = cy - cr.top - (cy - cr.top - ty) * ratio;
+      tx += cx - lastTouchCX;
+      ty += cy - lastTouchCY;
+      lastTouchDist = dist;
+      lastTouchCX = cx; lastTouchCY = cy;
+      applyTransform();
+    } else if (e.touches.length === 1 && isPanning) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - panStartX;
+      const dy = e.touches[0].clientY - panStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+      tx = panStartTx + dx; ty = panStartTy + dy;
+      applyTransform();
+    }
+  }, { signal: sig });
+
+  container.addEventListener('touchend', () => { isPanning = false; }, { signal: sig });
+
+  // --- Double-click to reset ---
+  container.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.fs-nav-btn, .fs-rating-overlay, .fs-rating-btn, button')) return;
+    e.preventDefault();
+    reset();
+  }, { signal: sig });
+
+  // Prevent context menu on middle-click
+  container.addEventListener('contextmenu', (e) => {
+    if (scale > 1) e.preventDefault();
+  }, { signal: sig });
+
+  return {
+    reset,
+    destroy() { ac.abort(); reset(); },
+    scale() { return scale; },
+    didPan() { return didPan; },
+  };
+}
+
 function setupTouchHandlers() {
   // Grid swipe for day navigation
   dom.gridContainer.addEventListener('touchstart', (e) => {
@@ -1847,14 +2222,16 @@ function setupTouchHandlers() {
     }
   }, { passive: true });
 
-  // Fullscreen swipe and tap
+  // Fullscreen swipe and tap (skip when zoomed — zoom controller handles it)
   dom.fsImageContainer.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) return; // let zoom controller handle multi-touch
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     touchStartTime = Date.now();
   }, { passive: true });
 
   dom.fsImageContainer.addEventListener('touchend', (e) => {
+    if (zoomController && zoomController.scale() > 1) return; // zoomed — skip swipe/tap
     const dx = e.changedTouches[0].clientX - touchStartX;
     const dy = e.changedTouches[0].clientY - touchStartY;
     const dt = Date.now() - touchStartTime;
@@ -1885,6 +2262,7 @@ function setupKeyboard() {
     const inputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
 
     if (e.key === 'Escape') {
+      if (dom.photoframeOverlay.classList.contains('open')) { closePhotoframe(); e.preventDefault(); return; }
       if (dom.calendarOverlay.classList.contains('open')) { closeCalendar(); e.preventDefault(); return; }
       if (dom.confirmOverlay.classList.contains('open')) { dom.confirmOverlay.classList.remove('open'); confirmCallback = null; e.preventDefault(); return; }
       if (dom.infoPanel.classList.contains('open') && infoPanelContext === 'thumbnail') { closeInfoPanel(); e.preventDefault(); return; }
@@ -1925,6 +2303,9 @@ function setupKeyboard() {
       else if (e.key === 'p' || e.key === 'P') {
         toggleSlideshow();
       }
+      else if (e.key === 'r' || e.key === 'R') {
+        if (zoomController) { zoomController.reset(); e.preventDefault(); }
+      }
       else if (e.key >= '1' && e.key <= '5') {
         const images = getActiveImages();
         if (images[fsIndex]) setRating(images[fsIndex], parseInt(e.key));
@@ -1960,6 +2341,262 @@ function setupKeyboard() {
   });
 }
 
+// ===== Browse Mode =====
+async function openBrowseDir(dir) {
+  if (!dir) return;
+  try {
+    dom.grid.innerHTML = '<div class="loading">Loading...</div>';
+    const resp = await api(`/api/browse?dir=${encodeURIComponent(dir)}&offset=0&limit=200`);
+    browseDir = resp.dir;
+    browseTotal = resp.total;
+    browseOffset = 0;
+    browseTruncated = resp.truncated;
+    currentImages = resp.images;
+    enterBrowseMode();
+    renderGrid(applyLocalFilters(currentImages));
+    updateBrowseStatus();
+    updateHash();
+  } catch (e) {
+    console.error('Failed to open directory:', e);
+    showEmpty('Failed to open directory');
+  }
+}
+
+async function pickAndBrowseDir() {
+  try {
+    const params = browseDir ? `?current=${encodeURIComponent(browseDir)}` : '';
+    const resp = await api(`/api/pick-directory${params}`);
+    if (resp.picked && resp.dir) {
+      openBrowseDir(resp.dir);
+    }
+  } catch (e) {
+    console.error('Failed to pick directory:', e);
+  }
+}
+
+function enterBrowseMode() {
+  document.querySelector('.day-nav').style.display = 'none';
+  dom.browseNav.classList.add('active');
+  dom.browsePath.textContent = browseDir;
+  dom.browsePath.title = browseDir;
+}
+
+function exitBrowseMode() {
+  browseDir = null;
+  browseTotal = 0;
+  browseOffset = 0;
+  browseTruncated = false;
+  currentImages = [];
+  dom.browseNav.classList.remove('active');
+  document.querySelector('.day-nav').style.display = '';
+  loadDates();
+  updateHash();
+}
+
+function updateBrowseStatus() {
+  const showing = currentImages.length;
+  let text = `${showing} of ${browseTotal} images`;
+  if (browseTruncated) text += ' (scan limit reached)';
+  dom.browseCount.textContent = text;
+  updateStatus(applyLocalFilters(currentImages).length);
+}
+
+async function loadMoreBrowseImages() {
+  if (!browseDir) return;
+  browseOffset += 200;
+  try {
+    const resp = await api(`/api/browse?dir=${encodeURIComponent(browseDir)}&offset=${browseOffset}&limit=200`);
+    currentImages = currentImages.concat(resp.images);
+    browseTotal = resp.total;
+    browseTruncated = resp.truncated;
+    renderGrid(applyLocalFilters(currentImages));
+    updateBrowseStatus();
+    appendLoadMoreButton();
+  } catch (e) {
+    console.error('Failed to load more browse images:', e);
+  }
+}
+
+function appendLoadMoreButton() {
+  // Remove existing load-more if any
+  const existing = dom.grid.querySelector('.load-more-row');
+  if (existing) existing.remove();
+  // Add if there are more images
+  if (currentImages.length < browseTotal) {
+    const row = document.createElement('div');
+    row.className = 'load-more-row';
+    row.innerHTML = `<button class="load-more-btn">Load more (${browseTotal - currentImages.length} remaining)</button>`;
+    row.querySelector('button').addEventListener('click', loadMoreBrowseImages);
+    dom.grid.appendChild(row);
+  }
+}
+
+// ===== Batch Slideshow (selected images only) =====
+function startSelectedSlideshow() {
+  if (selectedPaths.size === 0) return;
+  const images = getActiveImages();
+  // Find the first selected image and open fullscreen on it
+  const firstIdx = images.findIndex(i => selectedPaths.has(i.path));
+  if (firstIdx < 0) return;
+  openFullscreen(firstIdx);
+  // Start slideshow (it already knows to cycle through selectedPaths)
+  setTimeout(() => startSlideshow(), 100);
+}
+
+// ===== Photoframe / Collage =====
+function openPhotoframe() {
+  if (selectedPaths.size === 0) return;
+  const images = getActiveImages().filter(i => selectedPaths.has(i.path));
+  if (images.length === 0) return;
+
+  dom.photoframeOverlay.classList.add('open');
+  dom.pfCanvas.innerHTML = '<div class="loading">Arranging photos...</div>';
+
+  // Pre-load media to measure aspect ratios, then compute smart layout
+  let loaded = 0;
+  const imgData = []; // [{ar, img}]
+  const onReady = (ar, img) => {
+    imgData.push({ ar, img });
+    if (++loaded === images.length) renderPhotoframe(imgData);
+  };
+
+  images.forEach((img) => {
+    if (isVideo(img)) {
+      // For videos, use the thumbnail to get aspect ratio
+      const el = new Image();
+      el.onload = () => onReady(el.naturalWidth / el.naturalHeight, img);
+      el.onerror = () => onReady(16/9, img); // fallback 16:9
+      el.src = thumbUrl(img.path);
+    } else {
+      const el = new Image();
+      el.onload = () => onReady(el.naturalWidth / el.naturalHeight, img);
+      el.onerror = () => onReady(1, img); // fallback square
+      el.src = thumbUrl(img.path);
+    }
+  });
+}
+
+function renderPhotoframe(imgData) {
+  dom.pfCanvas.innerHTML = '';
+  const W = dom.pfCanvas.clientWidth;
+  const H = dom.pfCanvas.clientHeight;
+  if (W === 0 || H === 0) return;
+
+  // Sort by aspect ratio so similar orientations group together
+  imgData.sort((a, b) => a.ar - b.ar);
+
+  const gap = 4;
+  const cells = collageLayout(imgData, { x: 0, y: 0, w: W, h: H }, gap);
+
+  const fragment = document.createDocumentFragment();
+  cells.forEach(cell => {
+    const div = document.createElement('div');
+    div.className = 'pf-cell';
+    div.style.left = cell.x + 'px';
+    div.style.top = cell.y + 'px';
+    div.style.width = cell.w + 'px';
+    div.style.height = cell.h + 'px';
+    if (isVideo(cell.img)) {
+      const vid = document.createElement('video');
+      vid.src = imageUrl(cell.img.path);
+      vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
+      div.appendChild(vid);
+    } else {
+      const imgEl = document.createElement('img');
+      imgEl.src = imageUrl(cell.img.path);
+      imgEl.alt = cell.img.filename;
+      div.appendChild(imgEl);
+    }
+    fragment.appendChild(div);
+  });
+  dom.pfCanvas.appendChild(fragment);
+}
+
+function closePhotoframe() {
+  // Stop all playing videos
+  dom.pfCanvas.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
+  dom.photoframeOverlay.classList.remove('open');
+  dom.pfCanvas.innerHTML = '';
+}
+
+/**
+ * Recursive binary-partition collage layout.
+ *
+ * At each level: try every split point and both directions (vertical columns
+ * vs horizontal rows). Score each option by how well each sub-group's average
+ * aspect ratio matches the sub-rectangle it would receive. Pick the best,
+ * then recurse into each half.
+ *
+ * Space is allocated proportionally:
+ *   - Vertical split: width ∝ sum of aspect ratios (wider images get more width)
+ *   - Horizontal split: height ∝ sum of inverse ARs (taller images get more height)
+ *
+ * Items should be pre-sorted by aspect ratio so similar orientations cluster.
+ */
+function collageLayout(items, rect, gap) {
+  if (items.length === 0) return [];
+  if (items.length === 1) {
+    return [{ x: rect.x, y: rect.y, w: rect.w, h: rect.h, img: items[0].img }];
+  }
+
+  let best = { score: Infinity, i: 1, rectA: null, rectB: null };
+
+  for (let i = 1; i < items.length; i++) {
+    const left = items.slice(0, i);
+    const right = items.slice(i);
+
+    // --- Vertical split (left | right) ---
+    const sumL = left.reduce((s, x) => s + x.ar, 0);
+    const sumR = right.reduce((s, x) => s + x.ar, 0);
+    const frac = sumL / (sumL + sumR);
+    const wL = (rect.w - gap) * frac;
+    const wR = (rect.w - gap) - wL;
+    if (wL > 0 && wR > 0) {
+      const arL = wL / rect.h;
+      const arR = wR / rect.h;
+      const scoreV =
+        left.reduce((s, x) => s + (Math.log(x.ar / arL)) ** 2, 0) / left.length +
+        right.reduce((s, x) => s + (Math.log(x.ar / arR)) ** 2, 0) / right.length;
+      if (scoreV < best.score) {
+        best = { score: scoreV, i,
+          rectA: { x: rect.x, y: rect.y, w: wL, h: rect.h },
+          rectB: { x: rect.x + wL + gap, y: rect.y, w: wR, h: rect.h },
+        };
+      }
+    }
+
+    // --- Horizontal split (top / bottom) ---
+    const invL = left.reduce((s, x) => s + 1 / x.ar, 0);
+    const invR = right.reduce((s, x) => s + 1 / x.ar, 0);
+    const fracH = invL / (invL + invR);
+    const hT = (rect.h - gap) * fracH;
+    const hB = (rect.h - gap) - hT;
+    if (hT > 0 && hB > 0) {
+      const arT = rect.w / hT;
+      const arB = rect.w / hB;
+      const scoreH =
+        left.reduce((s, x) => s + (Math.log(x.ar / arT)) ** 2, 0) / left.length +
+        right.reduce((s, x) => s + (Math.log(x.ar / arB)) ** 2, 0) / right.length;
+      if (scoreH < best.score) {
+        best = { score: scoreH, i,
+          rectA: { x: rect.x, y: rect.y, w: rect.w, h: hT },
+          rectB: { x: rect.x, y: rect.y + hT + gap, w: rect.w, h: hB },
+        };
+      }
+    }
+  }
+
+  return [
+    ...collageLayout(items.slice(0, best.i), best.rectA, gap),
+    ...collageLayout(items.slice(best.i), best.rectB, gap),
+  ];
+}
+
+// Override getActiveImages to work in browse mode too
+function getActiveImages() {
+  return applyLocalFilters(currentImages);
+}
+
 // ===== Event Listeners =====
 function setupEventListeners() {
   // Search
@@ -1985,6 +2622,10 @@ function setupEventListeners() {
       dom.filterDropdown.classList.remove('open');
     }
   });
+
+  // Browse mode
+  dom.browseBtn.addEventListener('click', pickAndBrowseDir);
+  dom.browseClose.addEventListener('click', exitBrowseMode);
 
   // Day nav
   dom.prevDay.addEventListener('click', () => navigateDay(1));
@@ -2035,8 +2676,37 @@ function setupEventListeners() {
     if (selectedPaths.size === 0) return;
     confirmDelete([...selectedPaths]);
   });
+  $('#batchSlideshow').addEventListener('click', startSelectedSlideshow);
+  $('#batchPhotoframe').addEventListener('click', openPhotoframe);
 
-  // Fullscreen
+  // Photoframe
+  dom.pfClose.addEventListener('click', closePhotoframe);
+
+  // Fullscreen — click dark area around image to close (only when not zoomed)
+  dom.fsImageContainer.addEventListener('click', (e) => {
+    if (e.target === dom.fsImageContainer
+        && (!zoomController || zoomController.scale() <= 1)
+        && (!zoomController || !zoomController.didPan())) {
+      closeFullscreen();
+    }
+  });
+
+  // Fullscreen — in embed mode, click image to open in parent overlay (only when not zoomed)
+  dom.fsImage.addEventListener('click', (e) => {
+    if (isEmbedMode && dom.fullscreen.classList.contains('open')
+        && (!zoomController || zoomController.scale() <= 1)
+        && (!zoomController || !zoomController.didPan())) {
+      const images = getActiveImages();
+      if (fsIndex >= 0 && images[fsIndex]) {
+        window.parent.postMessage({
+          type: 'gallery-fullscreen',
+          src: imageUrl(images[fsIndex].path),
+          filename: images[fsIndex].filename
+        }, '*');
+      }
+    }
+  });
+
   dom.fsClose.addEventListener('click', closeFullscreen);
   dom.fsPrev.addEventListener('click', () => fsNavigate(-1));
   dom.fsNext.addEventListener('click', () => fsNavigate(1));

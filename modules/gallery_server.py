@@ -176,6 +176,8 @@ def remove_image_data(rel_key):
 
 THUMB_DIR = None
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+VIDEO_EXTENSIONS = {'.mp4', '.webm', '.mov', '.avi', '.mkv'}
+MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 
 
 def _get_thumb_dir():
@@ -197,15 +199,61 @@ def _thumb_path(abs_image_path, size=300):
     return os.path.join(_get_thumb_dir(), f"{h}.jpg")
 
 
-def generate_thumbnail(abs_image_path, size=300):
-    """Generate and cache a JPEG thumbnail. Returns bytes."""
-    cached = _thumb_path(abs_image_path, size)
+def _extract_video_frame(video_path):
+    """Extract a frame from a video file using ffmpeg. Returns PIL Image or None."""
+    import subprocess
+    import tempfile
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
+            tmp_path = tmp.name
+        # Extract frame at 1 second (or first frame if video is shorter)
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', video_path, '-ss', '1', '-vframes', '1',
+             '-q:v', '2', tmp_path],
+            capture_output=True, timeout=15,
+        )
+        if os.path.isfile(tmp_path) and os.path.getsize(tmp_path) > 0:
+            img = Image.open(tmp_path)
+            img.load()  # ensure fully loaded before we delete the temp file
+            os.unlink(tmp_path)
+            return img
+        # Try again at t=0 if t=1 failed (very short video)
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', video_path, '-vframes', '1',
+             '-q:v', '2', tmp_path],
+            capture_output=True, timeout=15,
+        )
+        if os.path.isfile(tmp_path) and os.path.getsize(tmp_path) > 0:
+            img = Image.open(tmp_path)
+            img.load()
+            os.unlink(tmp_path)
+            return img
+        os.unlink(tmp_path)
+    except Exception as e:
+        print(f"Gallery: video frame extraction failed for {video_path}: {e}")
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+    return None
+
+
+def generate_thumbnail(abs_media_path, size=300):
+    """Generate and cache a JPEG thumbnail. Supports images and videos. Returns bytes."""
+    cached = _thumb_path(abs_media_path, size)
     if os.path.isfile(cached):
         with open(cached, 'rb') as f:
             return f.read()
 
+    ext = os.path.splitext(abs_media_path)[1].lower()
     try:
-        img = Image.open(abs_image_path)
+        if ext in VIDEO_EXTENSIONS:
+            img = _extract_video_frame(abs_media_path)
+            if img is None:
+                return None
+        else:
+            img = Image.open(abs_media_path)
+
         img.thumbnail((size, size), Image.LANCZOS)
         if img.mode in ('RGBA', 'P'):
             bg = Image.new('RGB', img.size, (32, 32, 32))
@@ -223,7 +271,7 @@ def generate_thumbnail(abs_image_path, size=300):
             f.write(data)
         return data
     except Exception as e:
-        print(f"Gallery: thumbnail error for {abs_image_path}: {e}")
+        print(f"Gallery: thumbnail error for {abs_media_path}: {e}")
         return None
 
 
@@ -270,6 +318,131 @@ def read_image_metadata(filepath):
     except Exception:
         pass
     return None
+
+
+# ---------------------------------------------------------------------------
+# Browse-mode helpers (arbitrary directory browsing)
+# ---------------------------------------------------------------------------
+
+def _resolve_browse_path(path_param: str) -> str | None:
+    """If path starts with ABS: prefix, return the resolved absolute path.
+    Returns None if not a browse-mode path."""
+    if path_param.startswith('ABS:'):
+        return os.path.realpath(path_param[4:])
+    return None
+
+
+def _scan_directory_images(directory: str, offset: int = 0, limit: int = 200, max_scan: int = 10000):
+    """Recursively scan a directory for images.
+    Returns (images_list, total_count, truncated)."""
+    directory = os.path.realpath(directory)
+    all_files = []
+    scanned = 0
+    truncated = False
+
+    for root, dirs, files in os.walk(directory):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in MEDIA_EXTENSIONS:
+                continue
+            filepath = os.path.join(root, fname)
+            try:
+                stat = os.stat(filepath)
+                all_files.append((filepath, stat.st_mtime, stat.st_size))
+            except OSError:
+                continue
+            scanned += 1
+            if scanned >= max_scan:
+                truncated = True
+                break
+        if truncated:
+            break
+
+    # Sort by modification time descending (newest first)
+    all_files.sort(key=lambda x: x[1], reverse=True)
+    total = len(all_files)
+    page = all_files[offset:offset + limit]
+
+    images = []
+    for filepath, mtime, size in page:
+        ext = os.path.splitext(filepath)[1].lower()
+        rel_from_dir = os.path.relpath(filepath, directory).replace('\\', '/')
+        subfolder = os.path.dirname(rel_from_dir) if '/' in rel_from_dir else ''
+        abs_key = 'ABS:' + filepath.replace('\\', '/')
+        data = get_image_data(abs_key)
+        images.append({
+            "path": abs_key,
+            "filename": os.path.basename(filepath),
+            "subfolder": subfolder,
+            "size_bytes": size,
+            "modified_at": mtime,
+            "rating": data.get("rating", 0),
+            "starred": data.get("starred", False),
+            "is_video": ext in VIDEO_EXTENSIONS,
+        })
+
+    return images, total, truncated
+
+
+def _list_directory_children(directory: str):
+    """List subdirectories of a given directory. Returns list of dicts."""
+    directory = os.path.realpath(directory)
+    results = []
+    try:
+        for name in sorted(os.listdir(directory)):
+            full = os.path.join(directory, name)
+            if os.path.isdir(full) and not name.startswith('.'):
+                has_children = False
+                try:
+                    has_children = any(
+                        os.path.isdir(os.path.join(full, c))
+                        for c in os.listdir(full)
+                        if not c.startswith('.')
+                    )
+                except OSError:
+                    pass
+                results.append({
+                    "name": name,
+                    "path": full.replace('\\', '/'),
+                    "has_children": has_children,
+                })
+    except OSError:
+        pass
+    return results
+
+
+def _get_drive_roots():
+    """Get available drive roots (Windows) or filesystem roots."""
+    import platform
+    if platform.system() == 'Windows':
+        import string
+        drives = []
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if os.path.isdir(drive):
+                drives.append({
+                    "name": f"{letter}:",
+                    "path": f"{letter}:/",
+                    "has_children": True,
+                })
+        return drives
+    else:
+        return [{"name": "/", "path": "/", "has_children": True}]
+
+
+def _pick_directory_dialog(initial_dir: str | None = None) -> str | None:
+    """Open a native OS folder picker dialog. Returns selected path or None."""
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    kwargs = {'title': 'Select Folder'}
+    if initial_dir and os.path.isdir(initial_dir):
+        kwargs['initialdir'] = initial_dir
+    result = filedialog.askdirectory(**kwargs)
+    root.destroy()
+    return result if result else None
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +507,7 @@ def list_dates(profiles=None, topics=None, date_from=None, date_to=None):
             if date_to and date_dir > date_to:
                 continue
             count = sum(1 for f in os.listdir(date_path)
-                        if os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS)
+                        if os.path.splitext(f)[1].lower() in MEDIA_EXTENSIONS)
             if count > 0:
                 if date_dir not in dates:
                     dates[date_dir] = 0
@@ -352,7 +525,7 @@ def list_images_for_date(date_str, profiles=None, topics=None):
             continue
         for filename in os.listdir(date_path):
             ext = os.path.splitext(filename)[1].lower()
-            if ext not in IMAGE_EXTENSIONS:
+            if ext not in MEDIA_EXTENSIONS:
                 continue
             filepath = os.path.join(date_path, filename)
             if not os.path.isfile(filepath):
@@ -376,6 +549,7 @@ def list_images_for_date(date_str, profiles=None, topics=None):
                 "modified_at": mtime,
                 "rating": data.get("rating", 0),
                 "starred": data.get("starred", False),
+                "is_video": ext in VIDEO_EXTENSIONS,
             })
 
     images.sort(key=lambda x: x["modified_at"], reverse=True)
@@ -398,12 +572,13 @@ def search_images(query, profiles=None, topics=None, date_from=None, date_to=Non
                 continue
             for filename in os.listdir(date_path):
                 ext = os.path.splitext(filename)[1].lower()
-                if ext not in IMAGE_EXTENSIONS:
+                if ext not in MEDIA_EXTENSIONS:
                     continue
                 filepath = os.path.join(date_path, filename)
                 if not os.path.isfile(filepath):
                     continue
 
+                is_vid = ext in VIDEO_EXTENSIONS
                 if query_lower in filename.lower():
                     rel = _rel_path(filepath)
                     data = get_image_data(rel)
@@ -411,6 +586,7 @@ def search_images(query, profiles=None, topics=None, date_from=None, date_to=Non
                         "path": rel, "filename": filename,
                         "profile": prof, "topic": topic_name, "date": date_dir,
                         "rating": data.get("rating", 0), "starred": data.get("starred", False),
+                        "is_video": is_vid,
                     })
                     if len(results) >= limit:
                         return results
@@ -426,6 +602,7 @@ def search_images(query, profiles=None, topics=None, date_from=None, date_to=Non
                             "path": rel, "filename": filename,
                             "profile": prof, "topic": topic_name, "date": date_dir,
                             "rating": data.get("rating", 0), "starred": data.get("starred", False),
+                            "is_video": is_vid,
                         })
                         if len(results) >= limit:
                             return results
@@ -645,17 +822,26 @@ def create_app():
             images = [i for i in images if not is_nsfw_cached(_abs_path(i['path']))]
         return images
 
-    # --- API: Metadata (scoped to user's profile) ---
+    # --- API: Metadata (supports profile-scoped and ABS: browse paths) ---
     @app.get("/api/metadata")
     async def api_metadata(path: str = Query(...), user: str = Depends(_require_auth)):
-        rel = path.replace('\\', '/')
-        if not _path_belongs_to_user(rel, user):
-            raise HTTPException(status_code=403, detail="Access denied")
-        abs_p = _abs_path(path)
+        browse_abs = _resolve_browse_path(path)
+        if browse_abs:
+            abs_p = browse_abs
+            ext = os.path.splitext(abs_p)[1].lower()
+            if ext not in MEDIA_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="Not an image file")
+            data_key = path.replace('\\', '/')
+        else:
+            rel = path.replace('\\', '/')
+            if not _path_belongs_to_user(rel, user):
+                raise HTTPException(status_code=403, detail="Access denied")
+            abs_p = _abs_path(path)
+            data_key = None
         if not os.path.isfile(abs_p):
             raise HTTPException(status_code=404, detail="Image not found")
         meta = read_image_metadata(abs_p)
-        rel = _rel_path(abs_p)
+        rel = data_key if data_key else _rel_path(abs_p)
         data = get_image_data(rel)
         try:
             img = Image.open(abs_p)
@@ -689,14 +875,60 @@ def create_app():
             results = results[:limit]
         return results
 
-    # --- API: Thumbnail (scoped to user's profile) ---
+    # --- API: Browse directory (arbitrary path) ---
+    @app.get("/api/browse")
+    async def api_browse(dir: str = Query(...), offset: int = Query(0),
+                         limit: int = Query(200), safe_mode: bool = Query(False),
+                         user: str = Depends(_require_auth)):
+        resolved = os.path.realpath(dir)
+        if not os.path.isdir(resolved):
+            raise HTTPException(status_code=404, detail="Directory not found")
+        limit = min(max(limit, 1), 500)
+        offset = max(offset, 0)
+        images, total, truncated = _scan_directory_images(resolved, offset, limit)
+        if safe_mode:
+            images = [i for i in images if not is_nsfw_cached(
+                _resolve_browse_path(i['path']) or '')]
+        return {"images": images, "total": total, "dir": resolved.replace('\\', '/'),
+                "truncated": truncated, "offset": offset, "limit": limit}
+
+    # --- API: List directories (for folder picker) ---
+    @app.get("/api/list-dirs")
+    async def api_list_dirs(dir: str = Query(None),
+                            user: str = Depends(_require_auth)):
+        if not dir:
+            return _get_drive_roots()
+        resolved = os.path.realpath(dir)
+        if not os.path.isdir(resolved):
+            raise HTTPException(status_code=404, detail="Directory not found")
+        return _list_directory_children(resolved)
+
+    # --- API: Pick directory (native OS dialog) ---
+    @app.get("/api/pick-directory")
+    async def api_pick_directory(current: str = Query(None),
+                                 user: str = Depends(_require_auth)):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _pick_directory_dialog, current)
+        if not result:
+            return {"picked": False, "dir": None}
+        return {"picked": True, "dir": result.replace('\\', '/')}
+
+    # --- API: Thumbnail (supports profile-scoped and ABS: browse paths) ---
     @app.get("/api/thumbnail")
     async def api_thumbnail(path: str = Query(...), size: int = Query(300),
                             user: str = Depends(_require_auth)):
-        rel = path.replace('\\', '/')
-        if not _path_belongs_to_user(rel, user):
-            raise HTTPException(status_code=403, detail="Access denied")
-        abs_p = _abs_path(path)
+        browse_abs = _resolve_browse_path(path)
+        if browse_abs:
+            abs_p = browse_abs
+            ext = os.path.splitext(abs_p)[1].lower()
+            if ext not in MEDIA_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="Not an image file")
+        else:
+            rel = path.replace('\\', '/')
+            if not _path_belongs_to_user(rel, user):
+                raise HTTPException(status_code=403, detail="Access denied")
+            abs_p = _abs_path(path)
         if not os.path.isfile(abs_p):
             raise HTTPException(status_code=404, detail="Image not found")
         size = min(max(size, 50), 800)
@@ -705,74 +937,101 @@ def create_app():
             raise HTTPException(status_code=500, detail="Thumbnail generation failed")
         return Response(content=data, media_type="image/jpeg")
 
-    # --- API: Full image (scoped to user's profile) ---
+    # --- API: Full image (supports profile-scoped and ABS: browse paths) ---
     @app.get("/api/image")
     async def api_image(path: str = Query(...), user: str = Depends(_require_auth)):
-        rel = path.replace('\\', '/')
-        if not _path_belongs_to_user(rel, user):
-            raise HTTPException(status_code=403, detail="Access denied")
-        abs_p = _abs_path(path)
+        browse_abs = _resolve_browse_path(path)
+        if browse_abs:
+            abs_p = browse_abs
+            ext = os.path.splitext(abs_p)[1].lower()
+            if ext not in MEDIA_EXTENSIONS:
+                raise HTTPException(status_code=400, detail="Not an image file")
+        else:
+            rel = path.replace('\\', '/')
+            if not _path_belongs_to_user(rel, user):
+                raise HTTPException(status_code=403, detail="Access denied")
+            abs_p = _abs_path(path)
         if not os.path.isfile(abs_p):
             raise HTTPException(status_code=404, detail="Image not found")
         ext = os.path.splitext(abs_p)[1].lower()
-        mime_map = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'}
+        mime_map = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+            '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
+        }
         mime = mime_map.get(ext, 'application/octet-stream')
+        # For video files, use streaming response to support seeking
+        if ext in VIDEO_EXTENSIONS:
+            from starlette.responses import FileResponse
+            return FileResponse(abs_p, media_type=mime)
         with open(abs_p, 'rb') as f:
             return Response(content=f.read(), media_type=mime)
 
-    # --- API: Rate (scoped to user's profile) ---
+    # --- API: Rate (supports profile-scoped and ABS: browse paths) ---
     @app.post("/api/rate")
     async def api_rate(req: RateRequest, user: str = Depends(_require_auth)):
         rel = req.path.replace('\\', '/')
-        if not _path_belongs_to_user(rel, user):
+        is_browse = _resolve_browse_path(rel) is not None
+        if not is_browse and not _path_belongs_to_user(rel, user):
             raise HTTPException(status_code=403, detail="Access denied")
         if req.rating < 0 or req.rating > 5:
             raise HTTPException(status_code=400, detail="Rating must be 0-5")
         set_image_data(rel, {"rating": req.rating})
         return {"ok": True, "path": rel, "rating": req.rating}
 
-    # --- API: Star (scoped to user's profile) ---
+    # --- API: Star (supports profile-scoped and ABS: browse paths) ---
     @app.post("/api/star")
     async def api_star(req: StarRequest, user: str = Depends(_require_auth)):
         rel = req.path.replace('\\', '/')
-        if not _path_belongs_to_user(rel, user):
-            raise HTTPException(status_code=403, detail="Access denied")
-        abs_p = _abs_path(rel)
+        browse_abs = _resolve_browse_path(rel)
+        if browse_abs:
+            abs_p = browse_abs
+        else:
+            if not _path_belongs_to_user(rel, user):
+                raise HTTPException(status_code=403, detail="Access denied")
+            abs_p = _abs_path(rel)
         if not os.path.isfile(abs_p):
             raise HTTPException(status_code=404, detail="Image not found")
 
-        if req.starred:
-            approved_path = config.get_approved_output_path(abs_p)
-            if approved_path:
-                os.makedirs(os.path.dirname(approved_path), exist_ok=True)
-                shutil.copy2(abs_p, approved_path)
-                print(f"Gallery: Approved: {abs_p} -> {approved_path}")
-        else:
-            approved_path = config.get_approved_output_path(abs_p)
-            if approved_path and os.path.isfile(approved_path):
-                os.remove(approved_path)
-                print(f"Gallery: Unapproved: {approved_path}")
+        # Only copy to approved folder for profile-scoped images, not browse-mode
+        if not browse_abs:
+            if req.starred:
+                approved_path = config.get_approved_output_path(abs_p)
+                if approved_path:
+                    os.makedirs(os.path.dirname(approved_path), exist_ok=True)
+                    shutil.copy2(abs_p, approved_path)
+                    print(f"Gallery: Approved: {abs_p} -> {approved_path}")
+            else:
+                approved_path = config.get_approved_output_path(abs_p)
+                if approved_path and os.path.isfile(approved_path):
+                    os.remove(approved_path)
+                    print(f"Gallery: Unapproved: {approved_path}")
 
         set_image_data(rel, {"starred": req.starred})
         return {"ok": True, "path": rel, "starred": req.starred}
 
-    # --- API: Delete (scoped to user's profile) ---
+    # --- API: Delete (supports profile-scoped and ABS: browse paths) ---
     @app.post("/api/delete")
     async def api_delete(req: DeleteRequest, user: str = Depends(_require_auth)):
         deleted = []
         for p in req.paths:
             rel = p.replace('\\', '/')
-            if not _path_belongs_to_user(rel, user):
-                continue
-            abs_p = _abs_path(rel)
+            browse_abs = _resolve_browse_path(rel)
+            if browse_abs:
+                abs_p = browse_abs
+            else:
+                if not _path_belongs_to_user(rel, user):
+                    continue
+                abs_p = _abs_path(rel)
             if os.path.isfile(abs_p):
                 try:
                     os.remove(abs_p)
                     print(f"Gallery: Deleted: {abs_p}")
                     remove_image_data(rel)
-                    approved = config.get_approved_output_path(abs_p)
-                    if approved and os.path.isfile(approved):
-                        os.remove(approved)
+                    if not browse_abs:
+                        approved = config.get_approved_output_path(abs_p)
+                        if approved and os.path.isfile(approved):
+                            os.remove(approved)
                     thumb = _thumb_path(abs_p)
                     if os.path.isfile(thumb):
                         os.remove(thumb)
@@ -781,40 +1040,42 @@ def create_app():
                     print(f"Gallery: Delete failed for {abs_p}: {e}")
         return {"ok": True, "deleted": deleted}
 
-    # --- API: Batch (scoped to user's profile) ---
+    # --- API: Batch (supports profile-scoped and ABS: browse paths) ---
     @app.post("/api/batch")
     async def api_batch(req: BatchRequest, user: str = Depends(_require_auth)):
         results = []
         for p in req.paths:
             rel = p.replace('\\', '/')
-            if not _path_belongs_to_user(rel, user):
+            browse_abs = _resolve_browse_path(rel)
+            if not browse_abs and not _path_belongs_to_user(rel, user):
                 continue
+            abs_p = browse_abs if browse_abs else _abs_path(rel)
             if req.action == "rate" and isinstance(req.value, int):
                 set_image_data(rel, {"rating": req.value})
                 results.append({"path": rel, "action": "rated", "value": req.value})
             elif req.action == "star" and isinstance(req.value, bool):
-                abs_p = _abs_path(rel)
                 if os.path.isfile(abs_p):
-                    if req.value:
-                        approved = config.get_approved_output_path(abs_p)
-                        if approved:
-                            os.makedirs(os.path.dirname(approved), exist_ok=True)
-                            shutil.copy2(abs_p, approved)
-                    else:
-                        approved = config.get_approved_output_path(abs_p)
-                        if approved and os.path.isfile(approved):
-                            os.remove(approved)
+                    if not browse_abs:
+                        if req.value:
+                            approved = config.get_approved_output_path(abs_p)
+                            if approved:
+                                os.makedirs(os.path.dirname(approved), exist_ok=True)
+                                shutil.copy2(abs_p, approved)
+                        else:
+                            approved = config.get_approved_output_path(abs_p)
+                            if approved and os.path.isfile(approved):
+                                os.remove(approved)
                     set_image_data(rel, {"starred": req.value})
                     results.append({"path": rel, "action": "starred", "value": req.value})
             elif req.action == "delete":
-                abs_p = _abs_path(rel)
                 if os.path.isfile(abs_p):
                     try:
                         os.remove(abs_p)
                         remove_image_data(rel)
-                        approved = config.get_approved_output_path(abs_p)
-                        if approved and os.path.isfile(approved):
-                            os.remove(approved)
+                        if not browse_abs:
+                            approved = config.get_approved_output_path(abs_p)
+                            if approved and os.path.isfile(approved):
+                                os.remove(approved)
                         thumb = _thumb_path(abs_p)
                         if os.path.isfile(thumb):
                             os.remove(thumb)
